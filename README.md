@@ -51,6 +51,14 @@ npm run dev
 
 Open `http://localhost:5173`. By default, the backend stores data in `backend/data/buildtrace.mv.db` and uses the labeled fallback generator. To exercise the real model path, set `APP_AI_API_KEY` and, if needed, `APP_AI_BASE_URL` and `APP_AI_MODEL` before starting Spring Boot. See [`.env.example`](.env.example) for the complete environment inventory.
 
+For a local-only real generation test with an already authenticated Codex CLI, start the backend with:
+
+```bash
+APP_AI_PROVIDER=codex-cli APP_AI_TIMEOUT=180s mvn spring-boot:run
+```
+
+This creates a new non-interactive Codex task for each generation. It runs in an empty temporary directory with a read-only sandbox and does not expose or copy the CLI's saved credential. Local Codex generation can take around two minutes, so this example raises the model timeout to 180 seconds. Do not use this provider for the public demo: public deployment must call a model API directly and must not expose local Codex execution to untrusted users.
+
 ## Verification
 
 ```bash

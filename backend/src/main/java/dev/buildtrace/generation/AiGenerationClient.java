@@ -22,31 +22,49 @@ public class AiGenerationClient {
         Do not use Markdown fences, explanations, external packages, remote scripts, or external images.
         The result must be polished, responsive, accessible, and genuinely interactive.
         Every requested control must work in the browser. Prefer deterministic local sample data.
+        The app runs in a sandbox without same-origin access. Never use localStorage, sessionStorage,
+        IndexedDB, cookies, service workers, or any API that requires a normal document origin.
+        Keep demo state in JavaScript memory and prevent default form navigation.
         """;
 
     private final AiProperties properties;
     private final ObjectMapper objectMapper;
     private final WebClient webClient;
+    private final CodexCliGenerationClient codexCliClient;
 
-    public AiGenerationClient(AiProperties properties, ObjectMapper objectMapper, WebClient.Builder builder) {
+    public AiGenerationClient(
+        AiProperties properties,
+        ObjectMapper objectMapper,
+        WebClient.Builder builder,
+        CodexCliGenerationClient codexCliClient
+    ) {
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.webClient = builder.baseUrl(properties.baseUrl()).build();
+        this.codexCliClient = codexCliClient;
     }
 
     public boolean configured() {
+        if (usesCodexCli()) {
+            return true;
+        }
         return properties.apiKey() != null && !properties.apiKey().isBlank();
     }
 
     public String model() {
+        if (usesCodexCli()) {
+            return properties.codexModel() == null || properties.codexModel().isBlank()
+                ? "Codex CLI"
+                : "Codex CLI / " + properties.codexModel();
+        }
         return properties.model();
     }
 
     public Flux<String> stream(String prompt, String currentHtml) {
-        String userPrompt = currentHtml == null || currentHtml.isBlank()
-            ? "Create this application:\n" + prompt
-            : "Update the current application according to the request. Return the entire updated HTML."
-                + "\n\nRequest:\n" + prompt + "\n\nCurrent HTML:\n" + currentHtml;
+        String userPrompt = buildUserPrompt(prompt, currentHtml);
+        if (usesCodexCli()) {
+            return codexCliClient.stream(SYSTEM_PROMPT + "\n\n" + userPrompt);
+        }
 
         Map<String, Object> request = Map.of(
             "model", properties.model(),
@@ -71,6 +89,17 @@ public class AiGenerationClient {
             .filter(data -> !"[DONE]".equals(data))
             .mapNotNull(this::contentFromChunk)
             .timeout(properties.timeout());
+    }
+
+    private String buildUserPrompt(String prompt, String currentHtml) {
+        return currentHtml == null || currentHtml.isBlank()
+            ? "Create this application:\n" + prompt
+            : "Update the current application according to the request. Return the entire updated HTML."
+                + "\n\nRequest:\n" + prompt + "\n\nCurrent HTML:\n" + currentHtml;
+    }
+
+    private boolean usesCodexCli() {
+        return "codex-cli".equalsIgnoreCase(properties.provider());
     }
 
     private String contentFromChunk(String data) {
