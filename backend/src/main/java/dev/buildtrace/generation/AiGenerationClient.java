@@ -17,14 +17,19 @@ import java.util.Map;
 public class AiGenerationClient {
 
     private static final String SYSTEM_PROMPT = """
-        You are the implementation agent inside an AI app builder.
-        Return exactly one complete, self-contained HTML document with inline CSS and JavaScript.
-        Do not use Markdown fences, explanations, external packages, remote scripts, or external images.
-        The result must be polished, responsive, accessible, and genuinely interactive.
-        Every requested control must work in the browser. Prefer deterministic local sample data.
-        The app runs in a sandbox without same-origin access. Never use localStorage, sessionStorage,
-        IndexedDB, cookies, service workers, or any API that requires a normal document origin.
-        Keep demo state in JavaScript memory and prevent default form navigation.
+        You are the implementation agent inside BuildTrace, a multi-file React app builder.
+        Respond with exactly one JSON object and no Markdown or explanation:
+        {"summary":"short user-facing Chinese summary","operations":[{"type":"write","path":"/App.jsx","content":"complete file content"}]}
+
+        Rules:
+        - Use only operation types "write" and "delete". Paths must be absolute project paths.
+        - Every write contains the COMPLETE new content of that file, never a patch or ellipsis.
+        - Prefer changing only files needed for this request. Do not rewrite /package.json, /index.html or /index.jsx unless required.
+        - The app must remain a runnable Vite React app using the root-level scaffold. /App.jsx exports a default component and /styles.css contains its styles.
+        - Put additional React components under /components. Never create a second /src application tree.
+        - Use React and browser APIs only. Do not add external dependencies, remote scripts, external images, network calls or secrets.
+        - Every requested control must really work. Use React state and deterministic local sample data.
+        - Keep the result responsive, accessible and visually polished. Do not return placeholder prose about future work.
         """;
 
     private final AiProperties properties;
@@ -45,37 +50,61 @@ public class AiGenerationClient {
     }
 
     public boolean configured() {
-        if (usesCodexCli()) {
-            return true;
-        }
-        return properties.apiKey() != null && !properties.apiKey().isBlank();
+        return usesCodexCli() || (properties.apiKey() != null && !properties.apiKey().isBlank());
     }
 
     public String model() {
         if (usesCodexCli()) {
             return properties.codexModel() == null || properties.codexModel().isBlank()
-                ? "Codex CLI"
-                : "Codex CLI / " + properties.codexModel();
+                ? "Codex CLI" : "Codex CLI / " + properties.codexModel();
         }
         return properties.model();
     }
 
-    public Flux<String> stream(String prompt, String currentHtml) {
-        String userPrompt = buildUserPrompt(prompt, currentHtml);
+    public Flux<String> stream(String prompt, Map<String, String> currentFiles) {
+        String intent = currentFiles.isEmpty()
+            ? "Create the requested application. The server will provide the standard React scaffold."
+            : "Modify the current application while preserving behavior that the request does not change.";
+        return streamPrompt(intent + "\n\nUser request:\n" + prompt + "\n\nCurrent files JSON:\n" + json(currentFiles));
+    }
+
+    public Flux<String> repair(
+        String prompt,
+        Map<String, String> currentFiles,
+        String invalidOutput,
+        String validationError
+    ) {
+        String clippedOutput = invalidOutput.length() > 24_000 ? invalidOutput.substring(0, 24_000) : invalidOutput;
+        return streamPrompt("""
+            Repair the previous response. Return a corrected JSON object that satisfies the exact schema and preserves the user intent.
+
+            User request:
+            %s
+
+            Current files JSON:
+            %s
+
+            Validation error:
+            %s
+
+            Invalid response:
+            %s
+            """.formatted(prompt, json(currentFiles), validationError, clippedOutput));
+    }
+
+    private Flux<String> streamPrompt(String userPrompt) {
         if (usesCodexCli()) {
             return codexCliClient.stream(SYSTEM_PROMPT + "\n\n" + userPrompt);
         }
-
         Map<String, Object> request = Map.of(
             "model", properties.model(),
             "stream", true,
-            "temperature", 0.2,
+            "temperature", 0.1,
             "messages", List.of(
                 Map.of("role", "system", "content", SYSTEM_PROMPT),
                 Map.of("role", "user", "content", userPrompt)
             )
         );
-
         return webClient.post()
             .uri("/chat/completions")
             .contentType(MediaType.APPLICATION_JSON)
@@ -91,13 +120,6 @@ public class AiGenerationClient {
             .timeout(properties.timeout());
     }
 
-    private String buildUserPrompt(String prompt, String currentHtml) {
-        return currentHtml == null || currentHtml.isBlank()
-            ? "Create this application:\n" + prompt
-            : "Update the current application according to the request. Return the entire updated HTML."
-                + "\n\nRequest:\n" + prompt + "\n\nCurrent HTML:\n" + currentHtml;
-    }
-
     private boolean usesCodexCli() {
         return "codex-cli".equalsIgnoreCase(properties.provider());
     }
@@ -109,6 +131,14 @@ public class AiGenerationClient {
             return content.isTextual() ? content.asText() : null;
         } catch (Exception exception) {
             throw new IllegalArgumentException("Model returned an invalid streaming chunk", exception);
+        }
+    }
+
+    private String json(Map<String, String> files) {
+        try {
+            return objectMapper.writeValueAsString(files);
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("Unable to serialize project context", exception);
         }
     }
 }

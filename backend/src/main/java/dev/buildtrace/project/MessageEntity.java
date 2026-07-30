@@ -25,6 +25,12 @@ public class MessageEntity {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Column(length = 36)
+    private String runId;
+
+    @Column(length = 16)
+    private String status;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -32,10 +38,24 @@ public class MessageEntity {
     }
 
     public MessageEntity(String id, String projectId, String role, String content, Instant createdAt) {
+        this(id, projectId, role, content, null, null, createdAt);
+    }
+
+    public MessageEntity(
+        String id,
+        String projectId,
+        String role,
+        String content,
+        String runId,
+        String status,
+        Instant createdAt
+    ) {
         this.id = id;
         this.projectId = projectId;
         this.role = role;
         this.content = content;
+        this.runId = runId;
+        this.status = status;
         this.createdAt = createdAt;
     }
 
@@ -53,6 +73,14 @@ public class MessageEntity {
 
     public String getContent() {
         return content;
+    }
+
+    public String getRunId() {
+        return runId;
+    }
+
+    public String getStatus() {
+        return status;
     }
 
     public Instant getCreatedAt() {
