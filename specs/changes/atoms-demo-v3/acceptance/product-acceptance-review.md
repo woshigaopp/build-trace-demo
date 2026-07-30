@@ -1,6 +1,6 @@
 # Product Acceptance Review
 
-Status: local accepted; production deployment verification pending.
+Status: accepted locally and in production.
 
 ## PAR Readiness Local Audit Report
 
@@ -16,11 +16,11 @@ Status: local accepted; production deployment verification pending.
 
 | Item | Value |
 |---|---|
-| Environment | local full stack, fallback provider only |
-| URL | `http://127.0.0.1:5173` |
-| Branch/image/commit | `codex/atoms-demo-v3-build-trace`, pre-commit working tree |
+| Environment | local full stack plus Railway/Neon/Vercel production; no new production model request |
+| URL | `http://127.0.0.1:5173`, `https://buildtrace-atoms-demo.vercel.app` |
+| Branch/image/commit | merged GitHub commit `27cf3c0`; Railway `b253c4fe`; Vercel `dpl_BBXHqQP93wMaqxBLA4MncBHMVnM1` |
 | Browser used | yes, desktop and explicit `390x844` viewport |
-| Login/user role | freshly registered project owner, then anonymous public visitor |
+| Login/user role | freshly registered local and production project owners, then anonymous public visitor |
 | Feature object under review | seeded LaunchBoard, generated v2 trace and pinned public version |
 
 ## Product Semantic Matrix
@@ -86,4 +86,15 @@ Status: local accepted; production deployment verification pending.
 
 ## Final PAR Exit Audit
 
-Local acceptance has real browser evidence, state/API composition proof and no unresolved P0-P2 issue. Final exit remains pending until this exact commit is deployed to Railway/Vercel and the same registration, Trace, anonymous publication and desktop/mobile smoke are repeated against production.
+Acceptance has real browser evidence, state/API composition proof and no unresolved P0-P2 issue.
+
+Production evidence on 2026-07-30:
+
+- Railway deployment `b253c4fe-33ec-47ff-9de3-e23305857921` reached `SUCCESS`; `/actuator/health` returned `UP`, and the anonymous missing-publication probe returned contract-level 404 rather than auth 401.
+- Vercel deployment `dpl_BBXHqQP93wMaqxBLA4MncBHMVnM1` reached `Ready`; the production alias and `/p/{token}` rewrite both returned 200.
+- Fresh account `prod-v3-1785402635319@example.com` registered successfully against production PostgreSQL and received exactly one labelled nine-file LaunchBoard template.
+- LaunchBoard compiled in Sandpack. Advancing `林知夏` changed stage counts from `2/2/1` to `1/3/1`; preview refresh retained the state through localStorage.
+- Publishing v1 produced stable route `/p/3715b9dd061441a3b0dad7f8983de246`. A no-auth HTTP request returned exactly `name`, `versionNumber`, `files`, `publishedAt`, with nine files and no extra keys.
+- The published runtime compiled at desktop and `390x844`; controls and two board columns remained visible without overlap. Builder and public browser error logs were both empty.
+
+The Sandpack runtime can show its terminal after the first compile at a newly applied viewport and may require the provided refresh control once. This remains the recorded P3 runtime-latency limitation; it does not corrupt versions or block interaction after refresh.

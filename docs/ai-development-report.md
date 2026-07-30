@@ -69,7 +69,7 @@ Sandpack 提供编译、预览和 CodeMirror 编辑能力，BuildTrace 自己管
 - 文件路径穿越、删除必需脚手架、空操作和非法 JSON 被拒绝。
 - 手动保存、版本递增、比较数据和恢复不覆盖历史。
 - 前端 ESLint、TypeScript 和 Vite production build。
-- 注册事务只创建一个明确标注的七文件 LaunchBoard 模板，模板来源不会被标为 AI。
+- 注册事务只创建一个明确标注的九文件 LaunchBoard 模板，模板来源不会被标为 AI。
 - 成功 run 持久化理解、计划、真实 changed files、校验、有序时间线和交付版本；失败 run 没有虚构交付版本。
 - 首次发布固定 v1，创建 v2 后匿名读取仍是 v1；显式重发后同一 token 才切换到 v2。
 - 匿名 API 不需要登录，且 DTO 不包含 owner、消息、轨迹或内部项目标识。
