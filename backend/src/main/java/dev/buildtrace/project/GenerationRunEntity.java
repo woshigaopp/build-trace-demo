@@ -3,7 +3,6 @@ package dev.buildtrace.project;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
@@ -18,7 +17,6 @@ public class GenerationRunEntity {
     @Column(nullable = false, length = 36)
     private String projectId;
 
-    @Lob
     @Column(nullable = false, columnDefinition = "TEXT")
     private String prompt;
 
@@ -31,7 +29,6 @@ public class GenerationRunEntity {
     @Column(nullable = false)
     private int attemptCount;
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
 
