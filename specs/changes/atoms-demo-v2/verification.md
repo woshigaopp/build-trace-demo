@@ -23,4 +23,4 @@ No row may be marked passed until its command or browser evidence has actually b
 | VER-004/005 | passed | `GenerationLifecycleIntegrationTest`: five serial successes, repair success, repair failure atomicity |
 | VER-006 | passed | service integration plus relogin recovered complete message/run history |
 | VER-007/008 | passed | browser edit/save/compare/restore; v3-to-v4 diff contained only `/App.jsx` |
-| VER-009 | local passed, public pending | frontend lint/build/audit; local desktop and 390x844 browser evidence |
+| VER-009 | passed | Vercel/Railway/Neon public desktop and 390x844 browser evidence; health UP; detail 1.32s |

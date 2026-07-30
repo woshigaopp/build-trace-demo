@@ -37,6 +37,7 @@ Sandpack 提供编译、预览和 CodeMirror 编辑能力，BuildTrace 自己管
 3. 编辑器最初通过比较 Sandpack 文件 map 判断 dirty，运行时对 `package.json` 的格式化导致页面刚加载“保存版本”就可点。修复为结合 Sandpack 官方 `editorState` 和语义文件比较，只在真实代码变化时启用保存。
 4. 手动只改 `App.jsx` 后，版本差异曾同时显示 `package.json`。原因仍是 JSON 格式化差异。保存现在只覆盖语义变化的路径，版本比较对 `package.json` 做 JSON 语义比较，实际 changed-file 只剩 `/App.jsx`。
 5. 前端流提前断开不能等同于任务失败或成功。SSE 客户端只有收到 `completed` 才宣布成功；断线后重新读取 durable run。服务端即使无法继续向浏览器发送 token，也会继续执行并持久化终态。
+6. 公开部署后，项目详情稳定需要 16 秒。生产证据表明普通 PostgreSQL `TEXT` 字段被 `@Lob` 按 Large Object/OID 协议读取，每个内容字段都产生额外远端往返；并行读取第一次部署还触发了 `Large Objects may not be used in auto-commit mode`。最终移除错误的 `@Lob` 映射，用一次性、带标记的事务迁移把历史 OID 解引用为 UTF-8 TEXT，再并行加载独立集合。历史数据完整保留，详情降到约 1.2-1.3 秒。
 
 这些问题横跨模型协议、Servlet dispatch、浏览器编译器、编辑器状态和数据库事务，无法仅靠“代码能编译”发现。
 
@@ -64,6 +65,7 @@ Sandpack 提供编译、预览和 CodeMirror 编辑能力，BuildTrace 自己管
 - 比较 v3 和 v4 时只显示真实变化的 `/App.jsx`。
 - 恢复 v1 创建 v3，旧版本仍然存在；退出再登录后完整对话、v1-v4 和当前预览都恢复。
 - 390×844 移动端主流程无控件重叠，预览和移动/桌面切换可用。
+- 公开 Railway 健康检查为 `UP`，Vercel 精确 CORS 生效；另一账号读取项目返回 404；最终详情响应 1.32 秒并返回七文件、两版本和两条完整消息。
 
 ## 6. 后续演进
 
