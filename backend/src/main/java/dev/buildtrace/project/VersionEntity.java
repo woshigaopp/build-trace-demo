@@ -3,7 +3,6 @@ package dev.buildtrace.project;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 
@@ -24,15 +23,12 @@ public class VersionEntity {
     @Column(nullable = false)
     private int versionNumber;
 
-    @Lob
     @Column(nullable = false, columnDefinition = "TEXT")
     private String html;
 
-    @Lob
     @Column(columnDefinition = "TEXT")
     private String filesJson;
 
-    @Lob
     @Column(nullable = false, columnDefinition = "TEXT")
     private String prompt;
 
