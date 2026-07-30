@@ -1,10 +1,16 @@
 # BuildTrace
 
+> [!IMPORTANT]
+> **无需登录的公开实例：[LaunchBoard 招聘工作台](https://buildtrace-atoms-demo.vercel.app/p/3715b9dd061441a3b0dad7f8983de246)**
+>
+> 可直接搜索、筛选、添加或推进候选人并切换主题。首次打开需要准备隔离运行环境，通常耗时 10-20 秒；完整的注册、AI 生成、Build Trace、代码编辑、版本恢复与发布流程请进入 [BuildTrace 在线 Demo](https://buildtrace-atoms-demo.vercel.app)。
+
 BuildTrace 是一个面向 DeepWisdom Atoms Demo Assessment 的可追踪 AI 软件交付工作台。它不只返回一段生成代码，而是把一次需求如何被理解、如何被拆成计划、实际改了哪些文件、经过哪些校验或修复、最终交付哪个不可变版本，完整地呈现并持久化。
 
 用户注册后可以直接操作一个明确标注的产品级多文件示例，再用自然语言继续修改；Java 后端调用真实 LLM 并执行结构化文件操作，Sandpack 在浏览器中编译、编辑和运行 React 应用，PostgreSQL 保存账号、完整对话、构建轨迹和所有版本。完成的版本还可以发布为无需登录、版本固定且可直接交互的公开链接。
 
-- 在线 Demo：[https://buildtrace-atoms-demo.vercel.app](https://buildtrace-atoms-demo.vercel.app)
+- 完整工作台：[https://buildtrace-atoms-demo.vercel.app](https://buildtrace-atoms-demo.vercel.app)
+- 公开实例：[https://buildtrace-atoms-demo.vercel.app/p/3715b9dd061441a3b0dad7f8983de246](https://buildtrace-atoms-demo.vercel.app/p/3715b9dd061441a3b0dad7f8983de246)
 - 后端健康检查：[https://buildtrace-backend-production.up.railway.app/actuator/health](https://buildtrace-backend-production.up.railway.app/actuator/health)
 - 技术栈：React 19、TypeScript、Vite、Sandpack、Spring Boot 3、Java 21、PostgreSQL、SSE、JWT
 - 生产部署：Vercel、Railway、Neon、OpenAI-compatible LLM API
