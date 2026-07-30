@@ -4,42 +4,41 @@ import { LoaderCircle } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 export function ReliableSandpackPreview({ publicMode = false }: { publicMode?: boolean }) {
-  const { sandpack, dispatch, listen } = useSandpack()
+  const { sandpack, dispatch } = useSandpack()
   const refreshed = useRef(false)
+  const previewHandle = useRef<SandpackPreviewRef | null>(null)
   const [ready, setReady] = useState(false)
   const [clientId, setClientId] = useState<string>()
-  const capturePreview = useCallback((preview: SandpackPreviewRef | null) => setClientId(preview?.clientId), [])
+  const capturePreview = useCallback((preview: SandpackPreviewRef | null) => {
+    previewHandle.current = preview
+    setClientId(preview?.clientId)
+  }, [])
 
   useEffect(() => {
-    if (publicMode || sandpack.status !== 'running' || refreshed.current) return
+    if (sandpack.status !== 'running' || refreshed.current) return
     const timer = window.setTimeout(() => {
       refreshed.current = true
       dispatch({ type: 'refresh' })
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [dispatch, publicMode, sandpack.status])
+  }, [dispatch, sandpack.status])
 
   useEffect(() => {
     if (!publicMode || !clientId) return
-    let refreshTimer: number | undefined
-    const unsubscribe = listen((message) => {
-      if (message.type === 'start' && message.firstLoad) {
-        refreshed.current = false
-        setReady(false)
+    let doneAt: number | null = null
+    const interval = window.setInterval(() => {
+      if (previewHandle.current?.getClient()?.status !== 'done') {
+        doneAt = null
+        return
       }
-      if (message.type === 'stdout' && !refreshed.current && /(?:ready in|Local:)/i.test(message.payload.data ?? '')) {
-        refreshed.current = true
-        refreshTimer = window.setTimeout(() => dispatch({ type: 'refresh' }, clientId), 250)
-      }
-      if (message.type === 'done') {
+      doneAt ??= Date.now()
+      if (Date.now() - doneAt >= 600) {
         setReady(true)
+        window.clearInterval(interval)
       }
-    }, clientId)
-    return () => {
-      unsubscribe()
-      window.clearTimeout(refreshTimer)
-    }
-  }, [clientId, dispatch, listen, publicMode])
+    }, 150)
+    return () => window.clearInterval(interval)
+  }, [clientId, publicMode])
 
   const failed = sandpack.status === 'timeout' || Boolean(sandpack.error)
 
