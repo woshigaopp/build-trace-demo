@@ -3,6 +3,7 @@
 .env.local
 .idea/
 .vscode/
+.vercel/
 node_modules/
 dist/
 target/
