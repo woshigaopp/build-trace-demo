@@ -1,7 +1,6 @@
 import {
   SandpackCodeEditor,
   SandpackLayout,
-  SandpackPreview,
   SandpackProvider,
   useSandpack,
 } from '@codesandbox/sandpack-react'
@@ -9,6 +8,7 @@ import { BrainCircuit, Check, Code2, Copy, ExternalLink, FileCode2, History, Lap
 import { useMemo, useState } from 'react'
 import { api } from '../api'
 import type { ProjectDetail, VersionDetail } from '../types'
+import { ReliableSandpackPreview } from './ReliableSandpackPreview'
 import { TracePanel } from './TracePanel'
 
 type Tab = 'preview' | 'trace' | 'code' | 'versions'
@@ -95,7 +95,7 @@ function WorkspaceContent({ project, generating, phase = '', streamedChars = 0, 
         </div>
       </header>
       <div className={`preview-content ${activeTab}`}>
-        {activeTab === 'preview' && <div className={`sandpack-preview-shell ${viewport}`}><SandpackPreview showOpenInCodeSandbox={false} showRefreshButton /></div>}
+        {activeTab === 'preview' && <div className={`sandpack-preview-shell ${viewport}`}><ReliableSandpackPreview /></div>}
         {activeTab === 'trace' && <TracePanel project={project} generating={generating} phase={phase || (project.runs.some(run => !['succeeded', 'failed', 'cancelled'].includes(run.status)) ? '正在恢复服务端阶段' : '')} streamedChars={streamedChars} />}
         {activeTab === 'code' && <SandpackLayout className="code-workspace"><FileTree /><SandpackCodeEditor showTabs={false} showLineNumbers wrapContent closableTabs={false} /></SandpackLayout>}
         {activeTab === 'versions' && <VersionPanel project={project} generating={generating} onProjectChange={onProjectChange} onError={onError} onDone={() => setTab('preview')} />}

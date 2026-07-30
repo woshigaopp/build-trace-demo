@@ -1,8 +1,9 @@
-import { SandpackPreview, SandpackProvider } from '@codesandbox/sandpack-react'
+import { SandpackProvider } from '@codesandbox/sandpack-react'
 import { AlertTriangle, ArrowLeft, LoaderCircle, Sparkles } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '../api'
 import type { PublishedProject } from '../types'
+import { ReliableSandpackPreview } from './ReliableSandpackPreview'
 
 export function PublishedApp({ token }: { token: string }) {
   const [project, setProject] = useState<PublishedProject | null>(null)
@@ -31,7 +32,7 @@ export function PublishedApp({ token }: { token: string }) {
     </header>
     <section className="published-runtime" aria-label="已发布应用">
       <SandpackProvider key={`${token}-${project.versionNumber}`} template="vite-react" files={files} options={{ activeFile: '/App.jsx', visibleFiles: Object.keys(files) }} theme="light">
-        <SandpackPreview showOpenInCodeSandbox={false} showRefreshButton />
+        <ReliableSandpackPreview />
       </SandpackProvider>
     </section>
   </main>
