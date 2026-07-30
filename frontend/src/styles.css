@@ -214,7 +214,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .save-code-button:not(:disabled) { border-color: #191b1f; background: #191b1f; color: #fff; }
 .sandpack-preview-shell { width: 100%; height: 100%; min-height: 0; transition: width .2s ease; }
 .sandpack-preview-shell.mobile { width: min(390px, 100%); }
-.sandpack-preview-shell .sp-wrapper, .sandpack-preview-shell .sp-layout, .sandpack-preview-shell .sp-stack, .sandpack-preview-shell .sp-preview-container, .sandpack-preview-shell iframe { width: 100%; height: 100%; min-height: 0; }
+.sandpack-preview-shell .reliable-preview, .sandpack-preview-shell .sp-wrapper, .sandpack-preview-shell .sp-layout, .sandpack-preview-shell .sp-stack, .sandpack-preview-shell .sp-preview-container, .sandpack-preview-shell iframe { width: 100%; height: 100%; min-height: 0; }
 .sandpack-preview-shell .sp-layout { border: 1px solid #d6dae0; border-radius: 7px; overflow: hidden; box-shadow: 0 12px 28px rgba(30,35,42,.08); }
 .preview-content.code { overflow: hidden; background: #17191c; }
 .code-workspace.sp-layout { width: 100%; height: 100%; display: grid; grid-template-columns: 190px minmax(0, 1fr); border: 0; border-radius: 0; background: #17191c; }
@@ -327,9 +327,14 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .published-brand strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .published-brand small { color: #858c95; font-size: 8px; }
 .published-header > a, .public-state > a { display: flex; align-items: center; gap: 6px; color: #4d555f; font-size: 10px; text-decoration: none; }
-.published-runtime { min-height: 0; padding: 12px; }
-.published-runtime .sp-wrapper, .published-runtime .sp-layout, .published-runtime .sp-stack, .published-runtime .sp-preview-container, .published-runtime iframe { width: 100%; height: 100%; min-height: 0; }
+.published-runtime { min-height: 0; padding: 12px; position: relative; }
+.reliable-preview { width: 100%; height: 100%; min-height: 0; position: relative; }
+.published-runtime .reliable-preview, .published-runtime .sp-wrapper, .published-runtime .sp-layout, .published-runtime .sp-stack, .published-runtime .sp-preview-container, .published-runtime iframe { width: 100%; height: 100%; min-height: 0; }
 .published-runtime .sp-layout { overflow: hidden; border: 1px solid #d5d9de; border-radius: 7px; box-shadow: 0 10px 28px rgba(28, 34, 40, .08); }
+.public-runtime-loading { position: absolute; inset: 0; z-index: 20; display: grid; place-content: center; justify-items: center; gap: 7px; background: #f7f8f8; color: #747b83; text-align: center; }
+.public-runtime-loading svg { color: #315f50; }
+.public-runtime-loading strong { color: #292e34; font-size: 13px; }
+.public-runtime-loading span { font-size: 10px; }
 .public-state { min-height: 100vh; display: grid; place-content: center; justify-items: center; background: #f4f5f6; color: #737a84; text-align: center; padding: 24px; }
 .public-state > div { width: 50px; height: 50px; display: grid; place-items: center; border: 1px solid #d5d9de; border-radius: 7px; background: #fff; color: #3f6758; }
 .public-state strong { margin-top: 13px; color: #292e34; font-size: 14px; }

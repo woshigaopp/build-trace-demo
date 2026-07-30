@@ -32,7 +32,7 @@ export function PublishedApp({ token }: { token: string }) {
     </header>
     <section className="published-runtime" aria-label="已发布应用">
       <SandpackProvider key={`${token}-${project.versionNumber}`} template="vite-react" files={files} options={{ activeFile: '/App.jsx', visibleFiles: Object.keys(files) }} theme="light">
-        <ReliableSandpackPreview />
+        <ReliableSandpackPreview publicMode />
       </SandpackProvider>
     </section>
   </main>
