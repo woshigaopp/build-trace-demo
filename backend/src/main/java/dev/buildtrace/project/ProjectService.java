@@ -19,6 +19,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
 
 @Service
 public class ProjectService {
@@ -36,6 +38,7 @@ public class ProjectService {
     private final GenerationRunRepository runRepository;
     private final ObjectMapper objectMapper;
     private final ProjectFiles projectFiles;
+    private final ExecutorService executor;
 
     public ProjectService(
         ProjectRepository projectRepository,
@@ -43,7 +46,8 @@ public class ProjectService {
         VersionRepository versionRepository,
         GenerationRunRepository runRepository,
         ObjectMapper objectMapper,
-        ProjectFiles projectFiles
+        ProjectFiles projectFiles,
+        ExecutorService executor
     ) {
         this.projectRepository = projectRepository;
         this.messageRepository = messageRepository;
@@ -51,6 +55,7 @@ public class ProjectService {
         this.runRepository = runRepository;
         this.objectMapper = objectMapper;
         this.projectFiles = projectFiles;
+        this.executor = executor;
     }
 
     @Transactional
@@ -68,9 +73,16 @@ public class ProjectService {
             .toList();
     }
 
-    @Transactional(readOnly = true)
     public ProjectDetail get(String ownerId, String projectId) {
-        return toDetail(requireProject(ownerId, projectId));
+        ProjectEntity project = requireProject(ownerId, projectId);
+        CompletableFuture<List<MessageEntity>> messages = CompletableFuture.supplyAsync(
+            () -> messageRepository.findAllByProjectIdOrderByCreatedAtAsc(projectId), executor);
+        CompletableFuture<List<VersionEntity>> versions = CompletableFuture.supplyAsync(
+            () -> versionRepository.findAllByProjectIdOrderByVersionNumberDesc(projectId), executor);
+        CompletableFuture<List<GenerationRunEntity>> runs = CompletableFuture.supplyAsync(
+            () -> runRepository.findAllByProjectIdOrderByCreatedAtAsc(projectId), executor);
+        CompletableFuture.allOf(messages, versions, runs).join();
+        return toDetail(project, messages.join(), versions.join(), runs.join());
     }
 
     @Transactional
@@ -286,20 +298,45 @@ public class ProjectService {
     }
 
     private ProjectDetail toDetail(ProjectEntity project) {
-        List<MessageResponse> messages = messageRepository.findAllByProjectIdOrderByCreatedAtAsc(project.getId()).stream()
+        return toDetail(
+            project,
+            messageRepository.findAllByProjectIdOrderByCreatedAtAsc(project.getId()),
+            versionRepository.findAllByProjectIdOrderByVersionNumberDesc(project.getId()),
+            runRepository.findAllByProjectIdOrderByCreatedAtAsc(project.getId())
+        );
+    }
+
+    private ProjectDetail toDetail(
+        ProjectEntity project,
+        List<MessageEntity> messageEntities,
+        List<VersionEntity> versionEntities,
+        List<GenerationRunEntity> runEntities
+    ) {
+        List<MessageResponse> messages = messageEntities.stream()
             .map(message -> new MessageResponse(
                 message.getId(), message.getRole(), message.getContent(), message.getRunId(), message.getStatus(),
                 message.getCreatedAt()))
             .toList();
-        List<VersionResponse> versions = versionRepository.findAllByProjectIdOrderByVersionNumberDesc(project.getId()).stream()
+        List<VersionResponse> versions = versionEntities.stream()
             .map(this::toVersionResponse)
             .toList();
-        List<GenerationRunResponse> runs = runRepository.findAllByProjectIdOrderByCreatedAtAsc(project.getId()).stream()
+        List<GenerationRunResponse> runs = runEntities.stream()
             .map(this::toRunResponse)
             .toList();
         return new ProjectDetail(
-            project.getId(), project.getName(), project.getCurrentVersionId(), currentFiles(project),
+            project.getId(), project.getName(), project.getCurrentVersionId(), currentFiles(project, versionEntities),
             project.getCreatedAt(), project.getUpdatedAt(), messages, versions, runs);
+    }
+
+    private Map<String, String> currentFiles(ProjectEntity project, List<VersionEntity> versions) {
+        if (project.getCurrentVersionId() == null || project.getCurrentVersionId().isBlank()) {
+            return Map.of();
+        }
+        return versions.stream()
+            .filter(version -> version.getId().equals(project.getCurrentVersionId()))
+            .findFirst()
+            .map(this::filesOf)
+            .orElse(Map.of());
     }
 
     private VersionResponse toVersionResponse(VersionEntity version) {
