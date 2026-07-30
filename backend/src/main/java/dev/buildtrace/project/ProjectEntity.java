@@ -26,6 +26,15 @@ public class ProjectEntity {
     @Column(length = 36)
     private String currentVersionId;
 
+    @Column(length = 64, unique = true)
+    private String shareToken;
+
+    @Column(length = 36)
+    private String publishedVersionId;
+
+    @Column
+    private Instant publishedAt;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -71,6 +80,18 @@ public class ProjectEntity {
         return updatedAt;
     }
 
+    public String getShareToken() {
+        return shareToken;
+    }
+
+    public String getPublishedVersionId() {
+        return publishedVersionId;
+    }
+
+    public Instant getPublishedAt() {
+        return publishedAt;
+    }
+
     public void rename(String name) {
         this.name = name;
         this.updatedAt = Instant.now();
@@ -80,5 +101,12 @@ public class ProjectEntity {
         this.currentVersionId = versionId;
         this.currentHtml = "";
         this.updatedAt = Instant.now();
+    }
+
+    public void publish(String token, String versionId, Instant now) {
+        this.shareToken = token;
+        this.publishedVersionId = versionId;
+        this.publishedAt = now;
+        this.updatedAt = now;
     }
 }

@@ -87,4 +87,12 @@ public class ProjectController {
     ) {
         return projectService.restore(user.id(), projectId, versionId);
     }
+
+    @PostMapping("/{projectId}/publish")
+    ProjectDetail publish(
+        @AuthenticationPrincipal AuthenticatedUser user,
+        @PathVariable String projectId
+    ) {
+        return projectService.publish(user.id(), projectId);
+    }
 }

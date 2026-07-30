@@ -6,14 +6,18 @@ import dev.buildtrace.generation.ProjectFiles;
 import dev.buildtrace.project.ProjectDtos.GenerationContext;
 import dev.buildtrace.project.ProjectDtos.GenerationRunResponse;
 import dev.buildtrace.project.ProjectDtos.MessageResponse;
+import dev.buildtrace.project.ProjectDtos.PublicationResponse;
+import dev.buildtrace.project.ProjectDtos.PublishedProjectResponse;
 import dev.buildtrace.project.ProjectDtos.ProjectDetail;
 import dev.buildtrace.project.ProjectDtos.ProjectSummary;
+import dev.buildtrace.project.ProjectDtos.TraceEventResponse;
 import dev.buildtrace.project.ProjectDtos.VersionDetail;
 import dev.buildtrace.project.ProjectDtos.VersionResponse;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +70,28 @@ public class ProjectService {
         return toDetail(project);
     }
 
+    @Transactional
+    public ProjectDetail createShowcase(String ownerId, Map<String, String> files) {
+        Instant now = Instant.now();
+        ProjectEntity project = new ProjectEntity(
+            UUID.randomUUID().toString(), ownerId, "LaunchBoard 招聘工作台 · 示例", now);
+        projectRepository.save(project);
+        projectFiles.validate(files);
+        createVersion(
+            project,
+            files,
+            "可编辑的产品级示例，支持候选人管理、搜索筛选、阶段流转、主题切换和本地持久化",
+            "template",
+            null,
+            "LaunchBoard 产品级示例已就绪"
+        );
+        messageRepository.save(new MessageEntity(
+            UUID.randomUUID().toString(), project.getId(), "assistant",
+            "这是一个明确标注的可编辑示例。你可以先操作预览，再直接要求 AI 修改它。",
+            null, "succeeded", now));
+        return toDetail(project);
+    }
+
     @Transactional(readOnly = true)
     public List<ProjectSummary> list(String ownerId) {
         return projectRepository.findAllByGuestIdOrderByUpdatedAtDesc(ownerId).stream()
@@ -94,20 +120,55 @@ public class ProjectService {
 
         Instant now = Instant.now();
         String runId = UUID.randomUUID().toString();
-        runRepository.save(new GenerationRunEntity(runId, projectId, prompt, model, now));
+        GenerationRunEntity run = new GenerationRunEntity(runId, projectId, prompt, model, now);
+        appendTrace(run, GenerationRunStatus.QUEUED, "任务已持久化", "可以安全刷新或重新登录", 0);
+        runRepository.save(run);
         messageRepository.save(new MessageEntity(
             UUID.randomUUID().toString(), projectId, "user", prompt, runId, "accepted", now));
         return new GenerationContext(runId, projectId, prompt, currentFiles(project));
     }
 
     @Transactional
-    public void transitionRun(String ownerId, String projectId, String runId, GenerationRunStatus status, int attempt) {
+    public void transitionRun(
+        String ownerId,
+        String projectId,
+        String runId,
+        GenerationRunStatus status,
+        int attempt
+    ) {
+        transitionRun(ownerId, projectId, runId, status, attempt, phaseTitle(status));
+    }
+
+    @Transactional
+    public void transitionRun(
+        String ownerId,
+        String projectId,
+        String runId,
+        GenerationRunStatus status,
+        int attempt,
+        String message
+    ) {
         requireProject(ownerId, projectId);
         GenerationRunEntity run = requireRun(projectId, runId);
         if (GenerationRunStatus.valueOf(run.getStatus()).terminal()) {
             throw new IllegalStateException("Generation run is already terminal");
         }
         run.transition(status, attempt);
+        appendTrace(run, status, phaseTitle(status), message, attempt);
+        runRepository.save(run);
+    }
+
+    @Transactional
+    public void recordRunPlan(
+        String ownerId,
+        String projectId,
+        String runId,
+        String understanding,
+        List<String> plan
+    ) {
+        requireProject(ownerId, projectId);
+        GenerationRunEntity run = requireRun(projectId, runId);
+        run.recordPlan(truncate(understanding, 1_200), writeStringList(plan, 12, 400));
         runRepository.save(run);
     }
 
@@ -121,11 +182,42 @@ public class ProjectService {
         String summary,
         long durationMs
     ) {
+        return completeGeneration(
+            ownerId, projectId, runId, prompt, files, summary, summary, List.of(),
+            files.keySet().stream().sorted().toList(),
+            List.of("候选快照通过服务端结构校验"), durationMs);
+    }
+
+    @Transactional
+    public ProjectDetail completeGeneration(
+        String ownerId,
+        String projectId,
+        String runId,
+        String prompt,
+        Map<String, String> files,
+        String summary,
+        String understanding,
+        List<String> plan,
+        List<String> changedFiles,
+        List<String> checks,
+        long durationMs
+    ) {
         ProjectEntity project = requireProject(ownerId, projectId);
         GenerationRunEntity run = requireRun(projectId, runId);
         projectFiles.validate(files);
         VersionEntity version = createVersion(project, files, prompt, "ai", runId, summary);
+        run.recordPlan(truncate(understanding, 1_200), writeStringList(plan, 12, 400));
+        run.recordDelivery(
+            writeStringList(changedFiles, 40, 180),
+            writeStringList(checks, 12, 300),
+            version.getVersionNumber());
         run.succeed(durationMs);
+        appendTrace(
+            run,
+            GenerationRunStatus.SUCCEEDED,
+            "已交付不可变版本 v" + version.getVersionNumber(),
+            changedFiles.size() + " 个文件发生语义变化",
+            run.getAttemptCount());
         runRepository.save(run);
         messageRepository.save(new MessageEntity(
             UUID.randomUUID().toString(),
@@ -154,6 +246,12 @@ public class ProjectService {
         if (!GenerationRunStatus.valueOf(run.getStatus()).terminal()) {
             String safeError = conciseError(error);
             run.fail(safeError, durationMs);
+            appendTrace(
+                run,
+                GenerationRunStatus.FAILED,
+                "本次构建未交付",
+                safeError + "；当前版本保持不变",
+                run.getAttemptCount());
             runRepository.save(run);
             messageRepository.save(new MessageEntity(
                 UUID.randomUUID().toString(), projectId, "assistant",
@@ -214,12 +312,47 @@ public class ProjectService {
             String error = "服务重启中断了本次生成，当前版本未被修改，请直接重试";
             long durationMs = Math.max(0, java.time.Duration.between(run.getCreatedAt(), now).toMillis());
             run.fail(error, durationMs);
+            appendTrace(
+                run,
+                GenerationRunStatus.FAILED,
+                "服务重启后已安全收敛",
+                "未发布候选文件，当前版本保持不变",
+                run.getAttemptCount());
             runRepository.save(run);
             messageRepository.save(new MessageEntity(
                 UUID.randomUUID().toString(), run.getProjectId(), "assistant",
                 error + "。", run.getId(), "failed", now));
         });
         return interrupted.size();
+    }
+
+    @Transactional
+    public ProjectDetail publish(String ownerId, String projectId) {
+        ProjectEntity project = requireProject(ownerId, projectId);
+        ensureNoActiveRun(projectId);
+        if (project.getCurrentVersionId() == null || project.getCurrentVersionId().isBlank()) {
+            throw new IllegalStateException("当前项目还没有可发布版本");
+        }
+        requireVersion(projectId, project.getCurrentVersionId());
+        String token = project.getShareToken();
+        if (token == null || token.isBlank()) {
+            token = UUID.randomUUID().toString().replace("-", "");
+        }
+        project.publish(token, project.getCurrentVersionId(), Instant.now());
+        projectRepository.save(project);
+        return toDetail(project);
+    }
+
+    @Transactional(readOnly = true)
+    public PublishedProjectResponse getPublished(String token) {
+        ProjectEntity project = projectRepository.findByShareToken(token)
+            .orElseThrow(() -> new NoSuchElementException("Published project not found"));
+        if (project.getPublishedVersionId() == null || project.getPublishedVersionId().isBlank()) {
+            throw new NoSuchElementException("Published project not found");
+        }
+        VersionEntity version = requireVersion(project.getId(), project.getPublishedVersionId());
+        return new PublishedProjectResponse(
+            project.getName(), version.getVersionNumber(), filesOf(version), project.getPublishedAt());
     }
 
     private VersionEntity createVersion(
@@ -325,6 +458,7 @@ public class ProjectService {
             .toList();
         return new ProjectDetail(
             project.getId(), project.getName(), project.getCurrentVersionId(), currentFiles(project, versionEntities),
+            toPublication(project, versionEntities),
             project.getCreatedAt(), project.getUpdatedAt(), messages, versions, runs);
     }
 
@@ -356,7 +490,86 @@ public class ProjectService {
     private GenerationRunResponse toRunResponse(GenerationRunEntity run) {
         return new GenerationRunResponse(
             run.getId(), run.getPrompt(), run.getStatus().toLowerCase(), run.getModel(), run.getAttemptCount(),
-            run.getErrorMessage(), run.getDurationMs(), run.getCreatedAt(), run.getUpdatedAt());
+            run.getErrorMessage(), run.getDurationMs(), run.getUnderstanding(),
+            readStringList(run.getPlanJson()), readStringList(run.getChangedFilesJson()),
+            readStringList(run.getChecksJson()), readTrace(run.getTraceJson()), run.getDeliveredVersionNumber(),
+            run.getCreatedAt(), run.getUpdatedAt());
+    }
+
+    private PublicationResponse toPublication(ProjectEntity project, List<VersionEntity> versions) {
+        if (project.getShareToken() == null || project.getPublishedVersionId() == null) {
+            return null;
+        }
+        return versions.stream()
+            .filter(version -> version.getId().equals(project.getPublishedVersionId()))
+            .findFirst()
+            .map(version -> new PublicationResponse(
+                project.getShareToken(), version.getId(), version.getVersionNumber(), project.getPublishedAt()))
+            .orElse(null);
+    }
+
+    private void appendTrace(
+        GenerationRunEntity run,
+        GenerationRunStatus status,
+        String title,
+        String detail,
+        int attempt
+    ) {
+        List<TraceEventResponse> trace = new ArrayList<>(readTrace(run.getTraceJson()));
+        trace.add(new TraceEventResponse(
+            status.name().toLowerCase(), title, truncate(detail, 800), attempt, Instant.now()));
+        try {
+            run.setTraceJson(objectMapper.writeValueAsString(trace));
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("Unable to store build trace", exception);
+        }
+    }
+
+    private String phaseTitle(GenerationRunStatus status) {
+        return switch (status) {
+            case GENERATING -> "正在实现需求";
+            case VALIDATING -> "正在校验候选版本";
+            case REPAIRING -> "正在自动修复";
+            case QUEUED -> "任务已入队";
+            case SUCCEEDED -> "构建成功";
+            case FAILED -> "构建失败";
+            case CANCELLED -> "构建已取消";
+        };
+    }
+
+    private String writeStringList(List<String> values, int maxItems, int maxLength) {
+        List<String> safeValues = values == null ? List.of() : values.stream()
+            .filter(value -> value != null && !value.isBlank())
+            .limit(maxItems)
+            .map(value -> truncate(value.trim(), maxLength))
+            .toList();
+        try {
+            return objectMapper.writeValueAsString(safeValues);
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("Unable to store trace metadata", exception);
+        }
+    }
+
+    private List<String> readStringList(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() { });
+        } catch (Exception exception) {
+            throw new IllegalStateException("Stored trace metadata is invalid", exception);
+        }
+    }
+
+    private List<TraceEventResponse> readTrace(String json) {
+        if (json == null || json.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() { });
+        } catch (Exception exception) {
+            throw new IllegalStateException("Stored build trace is invalid", exception);
+        }
     }
 
     private String conciseError(String value) {

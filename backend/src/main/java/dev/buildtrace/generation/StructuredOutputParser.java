@@ -3,6 +3,8 @@ package dev.buildtrace.generation;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 public class StructuredOutputParser {
 
@@ -29,11 +31,37 @@ public class StructuredOutputParser {
             if (result.operations().size() > 30) {
                 throw new IllegalArgumentException("Model returned too many file operations");
             }
-            return result;
+            if (result.plan() != null && result.plan().size() > 12) {
+                throw new IllegalArgumentException("Model returned too many plan steps");
+            }
+            if (result.checks() != null && result.checks().size() > 12) {
+                throw new IllegalArgumentException("Model returned too many verification checks");
+            }
+            return new GenerationResult(
+                textOr(result.understanding(), "理解并实现本轮需求"),
+                cleanList(result.plan()),
+                textOr(result.summary(), "已完成本轮实现"),
+                result.operations(),
+                cleanList(result.checks())
+            );
         } catch (IllegalArgumentException exception) {
             throw exception;
         } catch (Exception exception) {
             throw new IllegalArgumentException("Model returned invalid structured JSON", exception);
         }
+    }
+
+    private List<String> cleanList(List<String> values) {
+        if (values == null) {
+            return List.of();
+        }
+        return values.stream()
+            .filter(value -> value != null && !value.isBlank())
+            .map(String::trim)
+            .toList();
+    }
+
+    private String textOr(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value.trim();
     }
 }

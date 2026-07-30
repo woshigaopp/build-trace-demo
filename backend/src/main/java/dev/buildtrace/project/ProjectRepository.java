@@ -10,4 +10,6 @@ interface ProjectRepository extends JpaRepository<ProjectEntity, String> {
     List<ProjectEntity> findAllByGuestIdOrderByUpdatedAtDesc(String ownerId);
 
     Optional<ProjectEntity> findByIdAndGuestId(String id, String ownerId);
+
+    Optional<ProjectEntity> findByShareToken(String shareToken);
 }
