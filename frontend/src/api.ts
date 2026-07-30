@@ -3,6 +3,7 @@ import type {
   GenerationCompleted,
   ProjectDetail,
   ProjectSummary,
+  PublishedProject,
   StreamHandlers,
   User,
   VersionDetail,
@@ -47,6 +48,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
+async function publicRequest<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    throw new Error(payload?.message ?? `Request failed (${response.status})`)
+  }
+  return response.json() as Promise<T>
+}
+
 export const api = {
   register: (email: string, password: string) =>
     request<AuthResponse>('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }),
@@ -66,6 +78,10 @@ export const api = {
     request<VersionDetail>(`/api/projects/${projectId}/versions/${versionId}`),
   restoreVersion: (projectId: string, versionId: string) =>
     request<ProjectDetail>(`/api/projects/${projectId}/versions/${versionId}/restore`, { method: 'POST' }),
+  publishProject: (projectId: string) =>
+    request<ProjectDetail>(`/api/projects/${projectId}/publish`, { method: 'POST' }),
+  getPublishedProject: (token: string) =>
+    publicRequest<PublishedProject>(`/api/public/projects/${encodeURIComponent(token)}`),
   generate: async (projectId: string, prompt: string, handlers: StreamHandlers) => {
     const response = await fetch(`${API_BASE}/api/projects/${projectId}/generate`, {
       method: 'POST',

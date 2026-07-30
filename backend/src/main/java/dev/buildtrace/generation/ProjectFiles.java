@@ -90,7 +90,7 @@ public class ProjectFiles {
     public Map<String, String> starter() {
         return Map.of(
             "/package.json", """
-                {"scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},"dependencies":{"react":"^18.2.0","react-dom":"^18.2.0"},"devDependencies":{"@vitejs/plugin-react":"3.1.0","vite":"4.1.4","esbuild-wasm":"0.17.12"}}
+                {"scripts":{"dev":"vite","build":"vite build","preview":"vite preview"},"dependencies":{"lucide-react":"^0.468.0","react":"^18.2.0","react-dom":"^18.2.0"},"devDependencies":{"@vitejs/plugin-react":"3.1.0","vite":"4.1.4","esbuild-wasm":"0.17.12"}}
                 """.trim(),
             "/index.html", """
                 <!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><title>BuildTrace App</title></head><body><div id="root"></div><script type="module" src="/index.jsx"></script></body></html>

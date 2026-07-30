@@ -35,7 +35,7 @@ public class SecurityConfiguration {
             .authorizeHttpRequests(authorize -> authorize
                 .dispatcherTypeMatchers(DispatcherType.ASYNC, DispatcherType.ERROR).permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                .requestMatchers("/api/auth/register", "/api/auth/login", "/actuator/health").permitAll()
+                .requestMatchers("/api/auth/register", "/api/auth/login", "/api/public/**", "/actuator/health").permitAll()
                 .anyRequest().authenticated()
             )
             .exceptionHandling(errors -> errors.authenticationEntryPoint((request, response, exception) -> {

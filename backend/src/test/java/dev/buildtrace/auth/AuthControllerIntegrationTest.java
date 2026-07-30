@@ -97,6 +97,30 @@ class AuthControllerIntegrationTest {
             .andExpect(content().string(org.hamcrest.Matchers.containsString("event:completed")));
     }
 
+    @Test
+    void registrationSeedsShowcaseAndPublishedRouteIsAnonymous() throws Exception {
+        String token = register("showcase-" + UUID.randomUUID() + "@example.com");
+        String list = mockMvc.perform(get("/api/projects").header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].name").value(org.hamcrest.Matchers.containsString("示例")))
+            .andExpect(jsonPath("$[0].hasPreview").value(true))
+            .andReturn().getResponse().getContentAsString();
+        String projectId = objectMapper.readTree(list).path(0).path("id").asText();
+
+        String publication = mockMvc.perform(post("/api/projects/{id}/publish", projectId)
+                .header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.publication.versionNumber").value(1))
+            .andReturn().getResponse().getContentAsString();
+        String shareToken = objectMapper.readTree(publication).path("publication").path("token").asText();
+
+        mockMvc.perform(get("/api/public/projects/{token}", shareToken))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.versionNumber").value(1))
+            .andExpect(jsonPath("$.files['/App.jsx']").exists())
+            .andExpect(jsonPath("$.ownerId").doesNotExist());
+    }
+
     private String register(String email) throws Exception {
         String response = mockMvc.perform(post("/api/auth/register")
                 .contentType(MediaType.APPLICATION_JSON)

@@ -4,6 +4,7 @@ import { api, AuthenticationError, clearToken, hasToken, setToken } from './api'
 import { AuthScreen } from './components/AuthScreen'
 import { ChatPanel } from './components/ChatPanel'
 import { ProjectSidebar } from './components/ProjectSidebar'
+import { PublishedApp } from './components/PublishedApp'
 import { WorkspacePanel } from './components/WorkspacePanel'
 import type { GenerationCompleted, ProjectDetail, ProjectSummary, User } from './types'
 
@@ -14,6 +15,11 @@ const starters = [
 ]
 
 export default function App() {
+  const publishedToken = publishedTokenFromPath()
+  return publishedToken ? <PublishedApp token={publishedToken} /> : <BuilderApp />
+}
+
+function BuilderApp() {
   const [user, setUser] = useState<User | null>(null)
   const [projects, setProjects] = useState<ProjectSummary[]>([])
   const [project, setProject] = useState<ProjectDetail | null>(null)
@@ -160,7 +166,7 @@ export default function App() {
       <main className="workspace">
         {error && <div className="error-banner" role="alert"><ShieldCheck size={16} /><span>{error}</span><button onClick={() => setError(null)}>关闭</button></div>}
         {runMeta && !error && <div className="run-banner"><Sparkles size={15} /><span>{runMeta.fallback ? '本地 fallback' : runMeta.model} 完成 · {(runMeta.durationMs / 1000).toFixed(1)} 秒 · v{runMeta.project.versions[0]?.versionNumber}</span><button onClick={() => setRunMeta(null)}>关闭</button></div>}
-        {showStart ? <StartWorkspace onBuild={createAndBuild} creating={generating} hasProjects={projects.length > 0} onCancel={() => setNewProjectMode(false)} /> : <div className="builder-layout"><ChatPanel project={project} generating={busy} phase={phase} streamedChars={streamedChars} onGenerate={build} /><WorkspacePanel project={project} generating={busy} onProjectChange={acceptProject} onError={setError} /></div>}
+        {showStart ? <StartWorkspace onBuild={createAndBuild} creating={generating} hasProjects={projects.length > 0} onCancel={() => setNewProjectMode(false)} /> : <div className="builder-layout"><ChatPanel project={project} generating={busy} phase={phase} streamedChars={streamedChars} onGenerate={build} /><WorkspacePanel project={project} generating={busy} phase={phase} streamedChars={streamedChars} onProjectChange={acceptProject} onError={setError} /></div>}
       </main>
     </div>
   )
@@ -176,4 +182,8 @@ function hasActiveRun(project: ProjectDetail) {
 }
 
 function projectName(prompt: string) { return prompt.replace(/[，。,.!?！？]/g, ' ').trim().slice(0, 28) || '未命名应用' }
+function publishedTokenFromPath() {
+  const match = window.location.pathname.match(/^\/p\/([A-Za-z0-9_-]+)\/?$/)
+  return match?.[1] ?? null
+}
 function messageOf(cause: unknown) { return cause instanceof Error ? cause.message : '发生了未知错误' }

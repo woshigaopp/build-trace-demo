@@ -19,7 +19,7 @@ class StructuredGenerationTest {
         GenerationResult result = parser.parse("""
             Result:
             ```json
-            {"summary":"updated","operations":[{"type":"write","path":"App.jsx","content":"import React from 'react'; export default function App(){ return <h1>Updated</h1>; }"}]}
+            {"understanding":"Add a useful status view","plan":["Update the primary component","Verify the interaction"],"summary":"updated","operations":[{"type":"write","path":"App.jsx","content":"import React from 'react'; export default function App(){ return <h1>Updated</h1>; }"}],"checks":["The status is visible"]}
             ```
             """);
 
@@ -27,6 +27,9 @@ class StructuredGenerationTest {
 
         assertThat(candidate).containsKeys("/package.json", "/index.jsx", "/App.jsx", "/styles.css");
         assertThat(candidate.get("/App.jsx")).contains("Updated");
+        assertThat(result.understanding()).isEqualTo("Add a useful status view");
+        assertThat(result.plan()).containsExactly("Update the primary component", "Verify the interaction");
+        assertThat(result.checks()).containsExactly("The status is visible");
     }
 
     @Test

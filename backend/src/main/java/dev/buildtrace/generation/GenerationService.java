@@ -9,6 +9,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
@@ -58,6 +59,8 @@ public class GenerationService {
             GenerationResult result;
             if (!aiClient.configured()) {
                 result = fallbackGenerator.generate(context.prompt());
+                projectService.recordRunPlan(
+                    ownerId, context.projectId(), context.runId(), result.understanding(), result.plan());
                 sendSafely(emitter, "phase", Map.of("step", "fallback", "message", "本地环境未配置模型，使用明确标记的交互式 fallback"));
             } else {
                 rawOutput = collect(aiClient.stream(context.prompt(), context.currentFiles()), emitter);
@@ -65,6 +68,8 @@ public class GenerationService {
                     "正在校验文件操作与 React 项目结构");
                 try {
                     result = outputParser.parse(rawOutput);
+                    projectService.recordRunPlan(
+                        ownerId, context.projectId(), context.runId(), result.understanding(), result.plan());
                     projectFiles.candidate(context.currentFiles(), result);
                 } catch (RuntimeException firstError) {
                     transition(emitter, ownerId, context, GenerationRunStatus.REPAIRING, 2,
@@ -74,14 +79,23 @@ public class GenerationService {
                     transition(emitter, ownerId, context, GenerationRunStatus.VALIDATING, 2,
                         "正在校验修复后的候选版本");
                     result = outputParser.parse(rawOutput);
+                    projectService.recordRunPlan(
+                        ownerId, context.projectId(), context.runId(), result.understanding(), result.plan());
                 }
             }
 
             Map<String, String> candidate = projectFiles.candidate(context.currentFiles(), result);
+            List<String> changedFiles = changedPaths(context.currentFiles(), candidate);
+            List<String> checks = List.of(
+                "结构化文件操作协议已解析",
+                "文件路径、数量和内容大小符合安全边界",
+                "Vite React 必需脚手架与入口完整",
+                "候选快照通过原子版本校验"
+            );
             long durationMs = elapsed(startedAt);
             ProjectDetail project = projectService.completeGeneration(
                 ownerId, context.projectId(), context.runId(), context.prompt(), candidate,
-                result.summary(), durationMs);
+                result.summary(), result.understanding(), result.plan(), changedFiles, checks, durationMs);
             sendSafely(emitter, "completed", Map.of(
                 "project", project,
                 "runId", context.runId(),
@@ -117,13 +131,21 @@ public class GenerationService {
         int attempt,
         String message
     ) {
-        projectService.transitionRun(ownerId, context.projectId(), context.runId(), status, attempt);
+        projectService.transitionRun(ownerId, context.projectId(), context.runId(), status, attempt, message);
         sendSafely(emitter, "phase", Map.of(
             "step", status.name().toLowerCase(), "status", status.name().toLowerCase(), "message", message));
     }
 
     private long elapsed(long startedAt) {
         return Duration.ofNanos(System.nanoTime() - startedAt).toMillis();
+    }
+
+    private List<String> changedPaths(Map<String, String> current, Map<String, String> candidate) {
+        return java.util.stream.Stream.concat(current.keySet().stream(), candidate.keySet().stream())
+            .distinct()
+            .filter(path -> !java.util.Objects.equals(current.get(path), candidate.get(path)))
+            .sorted()
+            .toList();
     }
 
     private String rootMessage(Throwable error) {

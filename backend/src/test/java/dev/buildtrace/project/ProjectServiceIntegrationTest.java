@@ -1,6 +1,7 @@
 package dev.buildtrace.project;
 
 import dev.buildtrace.generation.ProjectFiles;
+import dev.buildtrace.generation.ShowcaseProject;
 import dev.buildtrace.project.ProjectDtos.GenerationContext;
 import dev.buildtrace.project.ProjectDtos.ProjectDetail;
 import org.junit.jupiter.api.Test;
@@ -28,6 +29,9 @@ class ProjectServiceIntegrationTest {
 
     @Autowired
     private ProjectFiles projectFiles;
+
+    @Autowired
+    private ShowcaseProject showcaseProject;
 
     @Test
     void persistsRunsMessagesSnapshotsAndRestoresWithoutOverwritingHistory() {
@@ -115,6 +119,70 @@ class ProjectServiceIntegrationTest {
         assertThat(afterRestart.runs().getLast().errorMessage()).contains("服务重启");
         assertThat(afterRestart.messages().getLast().status()).isEqualTo("failed");
         assertThat(afterRestart.messages().getLast().content()).contains("请直接重试");
+    }
+
+    @Test
+    void persistsTruthfulBuildTraceMetadata() {
+        ProjectDetail created = projectService.create(OWNER_ID, "Traceable build");
+        GenerationContext run = projectService.beginGeneration(
+            OWNER_ID, created.id(), "add candidate search", "trace-model");
+        projectService.transitionRun(
+            OWNER_ID, created.id(), run.runId(), GenerationRunStatus.GENERATING, 1,
+            "正在生成最小必要文件操作");
+        projectService.recordRunPlan(
+            OWNER_ID, created.id(), run.runId(), "为候选人看板增加搜索", java.util.List.of("增加搜索状态", "过滤候选人列表"));
+        Map<String, String> files = withApp(projectFiles.starter(), "Searchable candidates");
+        projectService.completeGeneration(
+            OWNER_ID, created.id(), run.runId(), run.prompt(), files, "搜索已交付",
+            "为候选人看板增加搜索", java.util.List.of("增加搜索状态", "过滤候选人列表"),
+            java.util.List.of("/App.jsx"), java.util.List.of("React 入口完整", "候选快照通过原子校验"), 42);
+
+        ProjectDtos.GenerationRunResponse persisted = projectService.get(OWNER_ID, created.id()).runs().getFirst();
+
+        assertThat(persisted.understanding()).isEqualTo("为候选人看板增加搜索");
+        assertThat(persisted.plan()).containsExactly("增加搜索状态", "过滤候选人列表");
+        assertThat(persisted.changedFiles()).containsExactly("/App.jsx");
+        assertThat(persisted.checks()).containsExactly("React 入口完整", "候选快照通过原子校验");
+        assertThat(persisted.deliveredVersionNumber()).isEqualTo(1);
+        assertThat(persisted.trace()).extracting(ProjectDtos.TraceEventResponse::status)
+            .containsExactly("queued", "generating", "succeeded");
+    }
+
+    @Test
+    void publicationPinsImmutableVersionUntilExplicitRepublish() {
+        ProjectDetail created = projectService.create(OWNER_ID, "Published app");
+        GenerationContext first = projectService.beginGeneration(OWNER_ID, created.id(), "v1", "test-model");
+        ProjectDetail versionOne = projectService.completeGeneration(
+            OWNER_ID, created.id(), first.runId(), first.prompt(), withApp(projectFiles.starter(), "Version one"),
+            "v1", 10);
+        ProjectDetail firstPublication = projectService.publish(OWNER_ID, created.id());
+        String token = firstPublication.publication().token();
+
+        GenerationContext second = projectService.beginGeneration(OWNER_ID, created.id(), "v2", "test-model");
+        projectService.completeGeneration(
+            OWNER_ID, created.id(), second.runId(), second.prompt(), withApp(versionOne.currentFiles(), "Version two"),
+            "v2", 10);
+
+        assertThat(projectService.getPublished(token).versionNumber()).isEqualTo(1);
+        assertThat(projectService.getPublished(token).files().get("/App.jsx")).contains("Version one");
+
+        ProjectDetail secondPublication = projectService.publish(OWNER_ID, created.id());
+        assertThat(secondPublication.publication().token()).isEqualTo(token);
+        assertThat(secondPublication.publication().versionNumber()).isEqualTo(2);
+        assertThat(projectService.getPublished(token).files().get("/App.jsx")).contains("Version two");
+    }
+
+    @Test
+    void createsLabelledInteractiveShowcase() {
+        ProjectDetail showcase = projectService.createShowcase(OWNER_ID, showcaseProject.files());
+
+        assertThat(showcase.name()).contains("示例");
+        assertThat(showcase.versions()).singleElement().satisfies(version -> {
+            assertThat(version.source()).isEqualTo("template");
+            assertThat(version.fileCount()).isGreaterThanOrEqualTo(8);
+        });
+        assertThat(showcase.currentFiles().get("/App.jsx")).contains("usePersistentState");
+        assertThat(showcase.currentFiles().get("/components/CandidateCard.jsx")).contains("onAdvance");
     }
 
     private Map<String, String> withApp(Map<String, String> source, String heading) {

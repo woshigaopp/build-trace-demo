@@ -32,6 +32,24 @@ public class GenerationRunEntity {
     @Column(columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Column(columnDefinition = "TEXT")
+    private String understanding;
+
+    @Column(columnDefinition = "TEXT")
+    private String planJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String changedFilesJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String checksJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String traceJson;
+
+    @Column
+    private Integer deliveredVersionNumber;
+
     @Column
     private Long durationMs;
 
@@ -51,6 +69,10 @@ public class GenerationRunEntity {
         this.model = model;
         this.status = GenerationRunStatus.QUEUED.name();
         this.attemptCount = 0;
+        this.planJson = "[]";
+        this.changedFilesJson = "[]";
+        this.checksJson = "[]";
+        this.traceJson = "[]";
         this.createdAt = now;
         this.updatedAt = now;
     }
@@ -75,6 +97,24 @@ public class GenerationRunEntity {
         this.updatedAt = Instant.now();
     }
 
+    public void recordPlan(String understanding, String planJson) {
+        this.understanding = understanding;
+        this.planJson = planJson;
+        this.updatedAt = Instant.now();
+    }
+
+    public void recordDelivery(String changedFilesJson, String checksJson, int versionNumber) {
+        this.changedFilesJson = changedFilesJson;
+        this.checksJson = checksJson;
+        this.deliveredVersionNumber = versionNumber;
+        this.updatedAt = Instant.now();
+    }
+
+    public void setTraceJson(String traceJson) {
+        this.traceJson = traceJson;
+        this.updatedAt = Instant.now();
+    }
+
     public String getId() { return id; }
     public String getProjectId() { return projectId; }
     public String getPrompt() { return prompt; }
@@ -82,6 +122,12 @@ public class GenerationRunEntity {
     public String getModel() { return model; }
     public int getAttemptCount() { return attemptCount; }
     public String getErrorMessage() { return errorMessage; }
+    public String getUnderstanding() { return understanding; }
+    public String getPlanJson() { return planJson; }
+    public String getChangedFilesJson() { return changedFilesJson; }
+    public String getChecksJson() { return checksJson; }
+    public String getTraceJson() { return traceJson; }
+    public Integer getDeliveredVersionNumber() { return deliveredVersionNumber; }
     public Long getDurationMs() { return durationMs; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }

@@ -5,39 +5,47 @@ import {
   SandpackProvider,
   useSandpack,
 } from '@codesandbox/sandpack-react'
-import { Check, Code2, FileCode2, History, Laptop, LoaderCircle, MonitorPlay, RotateCcw, Save, Smartphone } from 'lucide-react'
+import { BrainCircuit, Check, Code2, Copy, ExternalLink, FileCode2, History, Laptop, LoaderCircle, MonitorPlay, Rocket, RotateCcw, Save, Smartphone } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { api } from '../api'
 import type { ProjectDetail, VersionDetail } from '../types'
+import { TracePanel } from './TracePanel'
 
-type Tab = 'preview' | 'code' | 'versions'
+type Tab = 'preview' | 'trace' | 'code' | 'versions'
 type Viewport = 'desktop' | 'mobile'
 
 interface Props {
   project: ProjectDetail
   generating: boolean
+  phase?: string
+  streamedChars?: number
   onProjectChange: (project: ProjectDetail) => Promise<void>
   onError: (message: string) => void
 }
 
-export function WorkspacePanel({ project, generating, onProjectChange, onError }: Props) {
+export function WorkspacePanel({ project, generating, phase = '', streamedChars = 0, onProjectChange, onError }: Props) {
   const files = useMemo(() => Object.fromEntries(Object.entries(project.currentFiles).map(([path, code]) => [path, { code }])), [project.currentFiles])
   if (!project.currentVersionId) return <EmptyWorkspace generating={generating} />
   return (
     <SandpackProvider key={project.currentVersionId} template="vite-react" files={files} options={{ activeFile: '/App.jsx', visibleFiles: Object.keys(files) }} theme="light">
-      <WorkspaceContent project={project} generating={generating} onProjectChange={onProjectChange} onError={onError} />
+      <WorkspaceContent project={project} generating={generating} phase={phase} streamedChars={streamedChars} onProjectChange={onProjectChange} onError={onError} />
     </SandpackProvider>
   )
 }
 
-function WorkspaceContent({ project, generating, onProjectChange, onError }: Props) {
+function WorkspaceContent({ project, generating, phase = '', streamedChars = 0, onProjectChange, onError }: Props) {
   const { sandpack } = useSandpack()
   const [tab, setTab] = useState<Tab>('preview')
   const [viewport, setViewport] = useState<Viewport>('desktop')
   const [saving, setSaving] = useState(false)
+  const [publishing, setPublishing] = useState(false)
+  const [copied, setCopied] = useState(false)
   const currentFiles = Object.fromEntries(Object.entries(sandpack.files).map(([path, file]) => [path, file.code]))
   const editedPaths = changedPaths(currentFiles, project.currentFiles)
   const dirty = sandpack.editorState === 'dirty' && editedPaths.length > 0
+  const publicationStale = Boolean(project.publication && project.publication.versionId !== project.currentVersionId)
+  const shareUrl = project.publication ? `${window.location.origin}/p/${project.publication.token}` : null
+  const activeTab: Tab = generating ? 'trace' : tab
 
   const save = async () => {
     setSaving(true)
@@ -55,24 +63,42 @@ function WorkspaceContent({ project, generating, onProjectChange, onError }: Pro
     }
   }
 
+  const publish = async () => {
+    setPublishing(true)
+    setCopied(false)
+    try { await onProjectChange(await api.publishProject(project.id)) } catch (cause) { onError(messageOf(cause)) } finally { setPublishing(false) }
+  }
+
+  const copyShareUrl = async () => {
+    if (!shareUrl) return
+    try { await navigator.clipboard.writeText(shareUrl); setCopied(true) } catch { onError('无法复制发布链接，请打开后从地址栏复制') }
+  }
+
   return (
     <section className="preview-panel">
       <header className="preview-toolbar">
         <div className="tab-list" role="tablist">
-          <TabButton active={tab === 'preview'} onClick={() => setTab('preview')} icon={<MonitorPlay size={15} />} label="预览" />
-          <TabButton active={tab === 'code'} onClick={() => setTab('code')} icon={<Code2 size={15} />} label="代码" />
-          <TabButton active={tab === 'versions'} onClick={() => setTab('versions')} icon={<History size={15} />} label={`版本 ${project.versions.length}`} />
+          <TabButton active={activeTab === 'preview'} onClick={() => setTab('preview')} icon={<MonitorPlay size={15} />} label="预览" />
+          <TabButton active={activeTab === 'trace'} onClick={() => setTab('trace')} icon={<BrainCircuit size={15} />} label={`轨迹 ${project.runs.length}`} />
+          <TabButton active={activeTab === 'code'} onClick={() => setTab('code')} icon={<Code2 size={15} />} label="代码" />
+          <TabButton active={activeTab === 'versions'} onClick={() => setTab('versions')} icon={<History size={15} />} label={`版本 ${project.versions.length}`} />
         </div>
         <div className="toolbar-actions">
           <span className={`runtime-status ${sandpack.status}`}>{sandpack.status === 'running' ? 'Preview running' : sandpack.status === 'idle' ? '正在初始化' : sandpack.status}</span>
-          {tab === 'preview' && <div className="viewport-switch"><button className={viewport === 'desktop' ? 'active' : ''} onClick={() => setViewport('desktop')} title="桌面预览"><Laptop size={15} /></button><button className={viewport === 'mobile' ? 'active' : ''} onClick={() => setViewport('mobile')} title="移动端预览"><Smartphone size={15} /></button></div>}
-          {tab === 'code' && <button className="save-code-button" onClick={() => void save()} disabled={!dirty || saving || generating}>{saving ? <LoaderCircle className="spin" size={14} /> : <Save size={14} />}{dirty ? '保存版本' : '已保存'}</button>}
+          <div className="publish-actions">
+            {project.publication && <span className={`publication-state ${publicationStale ? 'stale' : 'current'}`}>{publicationStale ? `已发布 v${project.publication.versionNumber} · 有新版本` : `已发布 v${project.publication.versionNumber}`}</span>}
+            <button className="publish-button" onClick={() => void publish()} disabled={publishing || generating} title={project.publication ? '将当前版本更新到公开链接' : '发布当前版本'}>{publishing ? <LoaderCircle className="spin" size={14}/> : <Rocket size={14}/>}<span>{project.publication ? '更新发布' : '发布'}</span></button>
+            {shareUrl && <><button className="toolbar-icon-button" onClick={() => void copyShareUrl()} title="复制公开链接"><Copy size={14}/><span className="sr-only">复制公开链接</span></button><a className="toolbar-icon-button" href={shareUrl} target="_blank" rel="noreferrer" title="打开公开应用"><ExternalLink size={14}/><span className="sr-only">打开公开应用</span></a>{copied && <span className="copy-confirmation">已复制</span>}</>}
+          </div>
+          {activeTab === 'preview' && <div className="viewport-switch"><button className={viewport === 'desktop' ? 'active' : ''} onClick={() => setViewport('desktop')} title="桌面预览"><Laptop size={15} /></button><button className={viewport === 'mobile' ? 'active' : ''} onClick={() => setViewport('mobile')} title="移动端预览"><Smartphone size={15} /></button></div>}
+          {activeTab === 'code' && <button className="save-code-button" onClick={() => void save()} disabled={!dirty || saving || generating}>{saving ? <LoaderCircle className="spin" size={14} /> : <Save size={14} />}{dirty ? '保存版本' : '已保存'}</button>}
         </div>
       </header>
-      <div className={`preview-content ${tab}`}>
-        {tab === 'preview' && <div className={`sandpack-preview-shell ${viewport}`}><SandpackPreview showOpenInCodeSandbox={false} showRefreshButton /></div>}
-        {tab === 'code' && <SandpackLayout className="code-workspace"><FileTree /><SandpackCodeEditor showTabs={false} showLineNumbers wrapContent closableTabs={false} /></SandpackLayout>}
-        {tab === 'versions' && <VersionPanel project={project} generating={generating} onProjectChange={onProjectChange} onError={onError} onDone={() => setTab('preview')} />}
+      <div className={`preview-content ${activeTab}`}>
+        {activeTab === 'preview' && <div className={`sandpack-preview-shell ${viewport}`}><SandpackPreview showOpenInCodeSandbox={false} showRefreshButton /></div>}
+        {activeTab === 'trace' && <TracePanel project={project} generating={generating} phase={phase || (project.runs.some(run => !['succeeded', 'failed', 'cancelled'].includes(run.status)) ? '正在恢复服务端阶段' : '')} streamedChars={streamedChars} />}
+        {activeTab === 'code' && <SandpackLayout className="code-workspace"><FileTree /><SandpackCodeEditor showTabs={false} showLineNumbers wrapContent closableTabs={false} /></SandpackLayout>}
+        {activeTab === 'versions' && <VersionPanel project={project} generating={generating} onProjectChange={onProjectChange} onError={onError} onDone={() => setTab('preview')} />}
       </div>
     </section>
   )

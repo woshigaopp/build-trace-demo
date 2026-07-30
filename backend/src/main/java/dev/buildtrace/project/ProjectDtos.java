@@ -60,8 +60,39 @@ public final class ProjectDtos {
         int attemptCount,
         String errorMessage,
         Long durationMs,
+        String understanding,
+        List<String> plan,
+        List<String> changedFiles,
+        List<String> checks,
+        List<TraceEventResponse> trace,
+        Integer deliveredVersionNumber,
         Instant createdAt,
         Instant updatedAt
+    ) {
+    }
+
+    public record TraceEventResponse(
+        String status,
+        String title,
+        String detail,
+        int attempt,
+        Instant createdAt
+    ) {
+    }
+
+    public record PublicationResponse(
+        String token,
+        String versionId,
+        int versionNumber,
+        Instant publishedAt
+    ) {
+    }
+
+    public record PublishedProjectResponse(
+        String name,
+        int versionNumber,
+        Map<String, String> files,
+        Instant publishedAt
     ) {
     }
 
@@ -87,6 +118,7 @@ public final class ProjectDtos {
         String name,
         String currentVersionId,
         Map<String, String> currentFiles,
+        PublicationResponse publication,
         Instant createdAt,
         Instant updatedAt,
         List<MessageResponse> messages,

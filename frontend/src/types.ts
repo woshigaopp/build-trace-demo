@@ -28,6 +28,14 @@ export interface Message {
 
 export type RunStatus = 'queued' | 'generating' | 'validating' | 'repairing' | 'succeeded' | 'failed' | 'cancelled'
 
+export interface TraceEvent {
+  status: RunStatus
+  title: string
+  detail: string
+  attempt: number
+  createdAt: string
+}
+
 export interface GenerationRun {
   id: string
   prompt: string
@@ -36,6 +44,12 @@ export interface GenerationRun {
   attemptCount: number
   errorMessage?: string
   durationMs?: number
+  understanding?: string
+  plan: string[]
+  changedFiles: string[]
+  checks: string[]
+  trace: TraceEvent[]
+  deliveredVersionNumber?: number
   createdAt: string
   updatedAt: string
 }
@@ -44,7 +58,7 @@ export interface Version {
   id: string
   versionNumber: number
   prompt: string
-  source: 'ai' | 'manual' | 'restore' | 'legacy'
+  source: 'ai' | 'manual' | 'restore' | 'legacy' | 'template'
   summary: string
   fileCount: number
   createdAt: string
@@ -59,11 +73,26 @@ export interface ProjectDetail {
   name: string
   currentVersionId: string | null
   currentFiles: Record<string, string>
+  publication: Publication | null
   createdAt: string
   updatedAt: string
   messages: Message[]
   versions: Version[]
   runs: GenerationRun[]
+}
+
+export interface Publication {
+  token: string
+  versionId: string
+  versionNumber: number
+  publishedAt: string
+}
+
+export interface PublishedProject {
+  name: string
+  versionNumber: number
+  files: Record<string, string>
+  publishedAt: string
 }
 
 export interface GenerationCompleted {
