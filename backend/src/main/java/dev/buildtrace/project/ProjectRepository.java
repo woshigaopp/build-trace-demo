@@ -7,7 +7,7 @@ import java.util.Optional;
 
 interface ProjectRepository extends JpaRepository<ProjectEntity, String> {
 
-    List<ProjectEntity> findAllByGuestIdOrderByUpdatedAtDesc(String guestId);
+    List<ProjectEntity> findAllByGuestIdOrderByUpdatedAtDesc(String ownerId);
 
-    Optional<ProjectEntity> findByIdAndGuestId(String id, String guestId);
+    Optional<ProjectEntity> findByIdAndGuestId(String id, String ownerId);
 }

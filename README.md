@@ -1,184 +1,181 @@
 # BuildTrace
 
-BuildTrace 是一个面向 DeepWisdom Atoms Demo Assessment 的 AI App Builder。用户用自然语言描述应用，Java 后端调用真实 LLM 生成可运行的单文件 Web 应用，React 工作台负责流式展示进度、沙箱预览、多轮修改、版本管理和刷新恢复。
+BuildTrace 是一个面向 DeepWisdom Atoms Demo Assessment 的 AI React App Builder。用户注册账号后用自然语言创建应用；Java 后端调用真实 LLM，生成结构化多文件变更；浏览器中的 Sandpack 负责编译、编辑和运行；PostgreSQL 持久化账号、完整对话、生成任务和每个不可变代码版本。
 
 - 在线 Demo：[https://buildtrace-atoms-demo.vercel.app](https://buildtrace-atoms-demo.vercel.app)
 - 后端健康检查：[https://buildtrace-backend-production.up.railway.app/actuator/health](https://buildtrace-backend-production.up.railway.app/actuator/health)
-- 技术栈：React 19、TypeScript、Vite、Spring Boot 3、Java 21、PostgreSQL、SSE
+- 技术栈：React 19、TypeScript、Vite、Sandpack、Spring Boot 3、Java 21、PostgreSQL、SSE、JWT
 - 生产部署：Vercel、Railway、Neon、OpenAI-compatible LLM API
+
+## Reviewer Quick Start
+
+1. 打开在线 Demo，使用任意有效邮箱和至少 8 位密码注册。
+2. 描述一个应用，等待生成状态到达成功；刷新页面不会丢失任务和对话。
+3. 在“预览”中操作生成应用，在“代码”中浏览全部文件并手动修改保存。
+4. 再发送一次修改需求，确认未提及的能力仍被保留。
+5. 在“版本”中比较变更文件并恢复旧快照；恢复会创建新版本，不覆盖历史。
+
+不需要预置测试账号，也不需要本地环境或额外配置。
+
+## 本次补交解决的问题
+
+| 首次反馈 | v2 处理方式 |
+| --- | --- |
+| 无注册登录 | BCrypt 密码哈希、JWT 登录态，所有权从服务端 principal 获取 |
+| 增量开发偶尔永远不成功 | 持久化 run 状态、模型超时、一次自动修复、终态失败、服务重启恢复 |
+| 部分项目对话不完整 | 用户消息在入队时保存，助手成功/失败消息和 run 绑定并完整恢复 |
+| 只支持单一且不完整的 HTML | 生成并持久化 Vite React 多文件工程，完整文件树和代码编辑器 |
+| Preview 只是单页展示 | Sandpack 在浏览器内真实编译并运行多文件 React 应用 |
 
 ## 核心能力
 
-- **真实 LLM 生成**：生产环境通过 OpenAI-compatible API 调用 `qwen-plus`，不是预制页面或固定动画。
-- **可运行应用**：生成结果包含完整 HTML、内联 CSS 和 JavaScript，在受限 iframe 中直接运行。
-- **真实交互**：生成应用可以包含表单、增删改、筛选、统计、主题切换等浏览器内交互。
-- **多轮修改**：继续描述变更时，后端把当前完整 HTML 与新需求一起交给模型生成下一版本。
-- **版本历史**：每次成功生成都会创建不可变版本；恢复旧版本会创建新版本，不覆盖历史。
-- **持久化与隔离**：项目、对话、当前 HTML 和版本存入 PostgreSQL，并按本地访客 ID 隔离。
-- **多种查看方式**：支持桌面/移动端预览、源码查看和新窗口运行。
-- **明确 fallback**：没有配置模型 Key 时仍可体验产品流程，但界面会明确标记为本地 fallback。
+- 真实邮箱注册、登录、退出与账号级数据隔离。
+- 真实 `qwen-plus` 流式调用；没有 API Key 时才使用界面明确标记的 fallback。
+- `/App.jsx`、`/components/*`、`/styles.css` 等多文件 React 工程，而不是单 HTML 文本。
+- 结构化 `write/delete` 文件操作，适合首轮生成和增量修改。
+- 候选快照校验失败后自动修复一次；仍失败则进入可理解、可重试的终态。
+- `queued/generating/validating/repairing/succeeded/failed/cancelled` 持久化状态机。
+- 成功前不移动当前版本指针，失败永远不会污染上一个可运行版本。
+- 完整文件树、代码编辑、手动保存、changed-file 比较和不可变版本恢复。
+- 桌面/移动预览与生成应用内真实状态交互。
+- 刷新、退出登录和重新登录后恢复项目、对话、run、文件和版本。
 
 ## 产品边界
 
-本项目要证明的是一条完整可信的 AI App Builder 主链路：
+生成物是浏览器内运行的 Vite React 前端应用，可以包含表单、增删改、筛选、统计、主题切换等真实交互。平台本身有 Java 后端和 PostgreSQL，但当前不为每个生成应用自动创建独立后端、数据库或公网部署。
 
-```text
-需求描述 -> 模型生成 -> 完整性校验 -> 运行预览
-        -> 多轮修改 -> 版本持久化 -> 回滚与刷新恢复
-```
-
-生成物目前是一个自包含的 HTML 文档，不是包含独立后端、数据库和依赖安装的多文件工程。平台持久化的是项目、对话、HTML 和版本；生成应用自身的业务数据保存在 iframe 的 JavaScript 内存中，刷新生成应用后会恢复其初始数据。
-
-这是 6-8 小时时间盒内的主动范围选择：优先把生成、执行、迭代、持久化和恢复做成可验证闭环，而不是引入 WebContainer、任意 npm 安装和生成应用独立部署所需的大量运行时基础设施。
+这是明确的运行时边界，不会把“可预览的前端应用”包装成“任意全栈产品”。继续产品化时，可以在现有文件操作和版本协议上增加依赖白名单、隔离构建容器和一键发布。
 
 ## 系统架构
 
 ```text
 Browser
   |
-  | React workspace / JSON / SSE
+  | React workspace / Bearer JWT / JSON + SSE
   v
-Vercel ------------------------------------------+
-  |                                               |
-  | VITE_API_BASE_URL                             | sandboxed iframe
-  v                                               v
-Railway: Spring Boot 3 / Java 21             Generated HTML app
-  |                    |
-  | JPA                | OpenAI-compatible streaming API
-  v                    v
-Neon PostgreSQL      qwen-plus
+Vercel: BuildTrace UI ------------------------+
+  |                                           |
+  | VITE_API_BASE_URL                         | multi-file snapshot
+  v                                           v
+Railway: Spring Boot 3 / Java 21          Sandpack Vite runtime
+  |                         |
+  | JPA                     | OpenAI-compatible stream
+  v                         v
+Neon PostgreSQL          qwen-plus
 ```
 
-前后端之间普通操作使用 JSON；生成过程是单向长响应，因此使用 SSE 而不是 WebSocket。SSE 足以表达阶段变化、增量 token、成功结果和失败事件，同时减少连接生命周期复杂度。
+普通 API 使用 JSON。生成使用 SSE，因为它是一次请求对应一条有序长响应，足以表达阶段、token、完成和失败，不需要 WebSocket 的双向连接生命周期。
 
 ## 一次生成如何完成
 
-1. 前端首次访问时生成随机 `X-Guest-Id` 并保存在浏览器本地，用它读取该访客的项目列表。
-2. 用户提交需求后，前端先创建项目，再调用 `POST /api/projects/{id}/generate`。
-3. `GenerationService` 先持久化用户消息，并读取项目的当前 HTML 作为多轮上下文。
-4. `AiGenerationClient` 组合 system prompt 和 user prompt，调用 OpenAI-compatible `/chat/completions`，开启 `stream=true`。
-5. 后端解析模型的流式 chunk，并向浏览器发送 `phase` 和 `token` SSE 事件。
-6. 模型流正常结束后，`HtmlExtractor` 提取 HTML，检查文档起止标签、`body` 和最小完整度。
-7. 只有校验成功，后端才在事务中创建版本、更新项目当前 HTML、写入助手消息。
-8. 后端发送唯一的 `completed` 事件；前端收到它后才替换预览。流提前结束或收到 `generation-error` 都不会把半份 HTML 当作成功结果。
+1. `POST /generate` 在事务中创建 `queued` run，并立即保存状态为 `accepted` 的用户消息。
+2. 后端读取当前版本的完整文件 map，把用户需求和当前快照交给模型。
+3. 模型按结构化协议返回完整文件写入或删除操作；流式片段同时通过 `token` 事件发送给前端。
+4. 后端先在内存中的候选快照应用操作，不直接修改数据库当前版本。
+5. 校验 schema、安全路径、文件数量/大小、必需脚手架、`package.json` 和 React 入口。
+6. 首次校验失败时，把原输出和精确错误交给模型修复一次，再重新完整校验。
+7. 只有候选快照合法，事务才创建不可变 Version、推进 `currentVersionId`、写入助手消息并把 run 标记为 `succeeded`。
+8. 模型、超时、解析、修复或保存失败时，run 和助手失败消息被持久化，当前版本保持不变，界面提供使用原需求重试。
+9. 服务重启时，遗留的非终态 run 会收敛为可重试失败，不会永久阻塞项目。
 
-对应的 SSE 事件语义：
+SSE 事件：
 
 | 事件 | 含义 |
 | --- | --- |
-| `phase` | 读取上下文、调用模型、校验 HTML 等阶段状态 |
-| `token` | 模型返回的增量文本，用于展示真实生成进度 |
-| `completed` | 已校验并持久化的最终项目、版本、模型和耗时 |
-| `generation-error` | 模型、解析、超时或保存过程中发生的失败 |
+| `phase` | `generating/validating/repairing` 等可见阶段 |
+| `token` | 模型返回的原始增量文本，仅用于真实进度反馈 |
+| `completed` | 已校验、持久化并可恢复的最终项目和版本 |
+| `generation-error` | 已持久化的终态失败、错误摘要和未受污染的项目 |
 
-## LLM Prompt 构造
+## LLM Prompt 与文件操作协议
 
-Prompt 设计分成稳定的运行时契约和每次变化的任务上下文，目标不是限制模型如何写界面，而是让生成物满足当前执行环境的硬约束。
+Prompt 分为稳定的 system contract 和每轮任务上下文。它不规定视觉方案，而是锁定生成物必须满足的执行协议。
 
-### 1. System prompt：锁定输出与运行时契约
+### System contract
 
-System prompt 要求模型：
-
-- 只返回一份完整、自包含的 HTML 文档，不返回 Markdown 围栏和解释文字。
-- CSS 和 JavaScript 必须内联，不依赖外部包、远程脚本或远程图片。
-- 页面需要响应式、可访问并且真正可交互，每个请求的控件都必须工作。
-- 优先提供确定性的示例数据，保证首次打开即可演示。
-- 生成物运行在没有 same-origin 权限的 iframe 中，因此不能使用 `localStorage`、`sessionStorage`、IndexedDB、Cookie 或 Service Worker。
-- 业务状态保存在当前页面内存中，表单必须阻止默认页面跳转。
-
-这些约束来自真实浏览器验收。早期模型生成物使用了 `localStorage`，在不含 `allow-same-origin` 的 iframe 中触发 `SecurityError`。最终选择修正 Prompt 契约，而不是降低 iframe 隔离级别。
-
-### 2. 首轮 user prompt：只携带产品需求
-
-```text
-Create this application:
-{用户输入的需求}
-```
-
-首轮不附加额外代码上下文，减少 token 消耗，并让 system prompt 专注约束输出格式和运行环境。
-
-### 3. 多轮 user prompt：需求加当前完整 HTML
-
-```text
-Update the current application according to the request.
-Return the entire updated HTML.
-
-Request:
-{本轮修改需求}
-
-Current HTML:
-{当前版本的完整 HTML}
-```
-
-模型拿到当前可运行版本和本轮差异需求，返回新的完整 HTML。这样不需要在客户端合并不可靠的局部代码片段，也能保证每一个成功版本都可以独立运行和回滚。
-
-当前方案的代价是 HTML 越大，多轮请求的 token 成本越高。产品化后应增加上下文长度限制、摘要、结构化 patch、自动修复和生成成本治理；在本次 Demo 范围内，完整文档重写更简单，也更容易验证。
-
-### 4. 模型请求参数
-
-Java 后端使用 Spring `WebClient` 发送兼容 OpenAI Chat Completions 的请求：
+模型只能返回一个 JSON 对象，不返回 Markdown 或解释：
 
 ```json
 {
-  "model": "${APP_AI_MODEL}",
-  "stream": true,
-  "temperature": 0.2,
-  "messages": [
-    { "role": "system", "content": "<runtime contract>" },
-    { "role": "user", "content": "<first build or update prompt>" }
+  "summary": "面向用户的简短中文说明",
+  "operations": [
+    {
+      "type": "write",
+      "path": "/App.jsx",
+      "content": "该文件的完整新内容"
+    },
+    {
+      "type": "delete",
+      "path": "/components/Unused.jsx"
+    }
   ]
 }
 ```
 
-`temperature=0.2` 用于降低生成结果的随机性。模型、API 地址、Key 和超时全部通过环境变量注入，业务代码不绑定具体厂商。生产环境使用千问，任何兼容相同流式协议的模型服务都可以替换。
+关键约束：
 
-此外提供本地专用的 `codex-cli` provider，用于在没有外部 API Key 时验证真实模型效果。它为每次生成创建空临时目录，以只读沙箱运行非交互 Codex 任务，读取最终输出后立即清理；该 provider 不用于公网部署。
+- 只允许 `write` 和 `delete`；路径必须是安全的项目绝对路径。
+- `write.content` 永远是完整文件内容，不是 diff、片段或省略号。
+- 使用根目录 Vite React 脚手架：`/index.jsx`、`/App.jsx`、`/styles.css`；附加组件放入 `/components`，不能创建第二套 `/src` 应用。
+- 增量需求只改必要文件，未被需求影响的能力和文件必须保留。
+- 不添加外部依赖、远程脚本、网络请求或秘密；控件必须用 React state 真正工作。
 
-## 数据模型与版本语义
+### 首轮与增量上下文
 
-平台包含三个核心实体：
+首轮的当前文件为空，后端在应用操作前补齐标准 Vite React 脚手架。增量请求的 user prompt 是：
 
-| 实体 | 保存内容 |
+```text
+Modify the current application while preserving behavior that the request does not change.
+
+User request:
+{本轮需求}
+
+Current files JSON:
+{当前不可变版本的完整文件 map}
+```
+
+这使模型明确看到当前事实，但返回内容只包含必要文件操作，避免每轮重写整个项目。
+
+### 自动修复
+
+第一次解析或候选校验失败后，repair prompt 携带原需求、当前文件、校验错误和被截断到安全长度的非法输出。模型只有一次修复机会。一次是有意的边界：它能处理常见格式错误，同时限制延迟、成本和无界重试。
+
+生产请求参数使用 `stream=true`、`temperature=0.1`。模型、地址、Key 和超时均来自环境变量，业务代码不绑定特定厂商。
+
+## 数据和安全语义
+
+| 实体 | 持久化内容 |
 | --- | --- |
-| `Project` | 访客归属、名称、当前 HTML、创建和更新时间 |
-| `Message` | 用户需求与平台生成结果消息，按时间排序 |
-| `Version` | 版本号、生成 Prompt、完整 HTML 和创建时间 |
+| `User` | 规范化邮箱、BCrypt 密码哈希、创建时间 |
+| `Project` | 账号归属、名称、当前版本指针、时间 |
+| `GenerationRun` | prompt、模型、状态、attempt、错误、耗时、时间 |
+| `Message` | 完整用户/助手对话、run 关联和成功/失败状态 |
+| `Version` | 版本号、来源、摘要、完整文件 JSON 快照、时间 |
 
-成功生成 v1、v2 时会分别保存两份完整 HTML。恢复 v1 不会删除 v2，也不会直接把当前指针倒退，而是复制 v1 的 HTML 创建新的 v3。这样历史保持只增不改，每次当前状态变化都有可追踪记录。
-
-## 安全与失败边界
-
-- 生成结果通过 `srcDoc` 放入 `sandbox="allow-scripts allow-forms"` 的 iframe。
-- 不开启 `allow-same-origin`，生成代码不能读取父页面 Origin 和存储。
-- 只有收到模型完整流并通过 HTML 校验后才创建版本。
-- API Key、数据库密码和平台 Token 只配置在托管平台的加密环境变量中。
-- CORS 生产环境只允许准确的 Vercel Origin。
-- 游客 ID 提供 Demo 级数据隔离，不等同于身份认证或权限系统。
-
-当前隔离适合评估 Demo，不是生产级任意代码沙箱。生产化还需要独立沙箱域名、CSP、出站网络限制、认证、限流、配额、数据保留策略和数据库迁移工具。
+- 项目所有者完全来自已验证 JWT，客户端不能提交 `ownerId` 或伪造访客 Header。
+- 密码只保存 BCrypt hash；JWT secret、模型 Key 和数据库凭证只存在于托管平台环境变量。
+- 每个项目最多一个非终态生成 run，防止并发写版本指针。
+- 文件路径、单文件大小、总大小和文件数都有服务端上限。
+- Sandpack 运行生成代码；当前演示的生成协议禁止网络请求和秘密，但它不是面向不受信任依赖的生产级任意代码沙箱。
 
 ## 本地运行
 
-要求：Java 21、Maven 3.9+、Node.js 20+。
-
-启动后端：
+要求 Java 21、Maven 3.9+、Node.js 20+。
 
 ```bash
+# terminal 1
 cd backend
 mvn spring-boot:run
-```
 
-启动前端：
-
-```bash
+# terminal 2
 cd frontend
 npm ci
 npm run dev
 ```
 
-访问 `http://localhost:5173`。默认使用文件型 H2 数据库 `backend/data/buildtrace.mv.db`；未配置模型 Key 时使用界面明确标记的 fallback。
+访问 `http://localhost:5173`。默认使用文件型 H2；未配置模型 Key 时使用明确标记的交互式 fallback。
 
-接入 OpenAI-compatible 模型：
+真实 OpenAI-compatible 模型：
 
 ```bash
 APP_AI_PROVIDER=api \
@@ -189,13 +186,7 @@ APP_AI_TIMEOUT=180s \
 mvn spring-boot:run
 ```
 
-本地 Codex CLI 模式：
-
-```bash
-APP_AI_PROVIDER=codex-cli APP_AI_TIMEOUT=180s mvn spring-boot:run
-```
-
-完整环境变量见 [`.env.example`](.env.example)。不要把真实 Key 或数据库密码写入 `.env.example`、README、Issue 或 Git 提交。
+本地也支持 `APP_AI_PROVIDER=codex-cli`，仅用于开发机验证，不部署到公网。完整变量见 [`.env.example`](.env.example)。
 
 ## 测试与验收
 
@@ -206,56 +197,36 @@ cd frontend && npm run build
 cd frontend && npm audit --audit-level=high
 ```
 
-当前自动化结果：后端 5 个测试通过，前端 lint 和生产构建通过，高危依赖审计为 0。后端测试覆盖：
+自动化覆盖：注册/登录和跨账号拒绝、SSE 异步完成、连续五次增量生成、非法输出后修复、修复失败的版本原子性、中断 run 恢复、完整消息与 run 持久化、文件路径/脚手架校验、手动版本和不可变恢复。
 
-- 项目、消息和版本持久化。
-- 版本递增和“恢复时创建新版本”。
-- 不同访客之间的数据隔离。
-- 从 Markdown 围栏和解释文本中提取完整 HTML。
-- 拒绝空响应和不完整 HTML。
-- 本地 Codex CLI 命令的隔离参数。
-
-浏览器验收路径：
-
-1. 创建应用并等待真实模型生成 v1。
-2. 在 iframe 内执行新增、筛选、删除或状态切换等交互。
-3. 提交修改需求并得到 v2。
-4. 恢复 v1，确认平台创建新的 v3。
-5. 刷新页面，确认对话、当前 HTML 和全部版本仍然存在。
+真实浏览器验收覆盖：注册、退出、重新登录；七文件树；代码编辑与精确 dirty 状态；手动保存；changed-file 比较；恢复创建新版本；Sandpack 预览内点击改变状态；刷新后恢复全部数据；390×844 移动布局。
 
 ## 生产部署
 
-当前线上拓扑：
-
-| 组件 | 平台 | 配置重点 |
+| 组件 | 平台 | 关键配置 |
 | --- | --- | --- |
 | 前端 | Vercel | `VITE_API_BASE_URL` 指向 Railway |
-| Java 后端 | Railway | Dockerfile、模型变量、数据库变量、精确 CORS |
-| PostgreSQL | Neon | JDBC SSL 连接，保存项目/消息/版本 |
-| LLM | OpenAI-compatible API | `APP_AI_BASE_URL`、`APP_AI_API_KEY`、`APP_AI_MODEL` |
+| Java 后端 | Railway | Dockerfile、JWT、模型、数据库、精确 CORS |
+| PostgreSQL | Neon | JDBC SSL 连接和持久化 |
+| LLM | OpenAI-compatible API | Base URL、API Key、model、timeout |
 
-部署不需要 AWS 账号或自管理虚拟机。详细变量模板见 [`.env.example`](.env.example)，Railway 使用 [`backend/Dockerfile`](backend/Dockerfile) 和 [`backend/railway.toml`](backend/railway.toml)，Vercel 使用 [`frontend/vercel.json`](frontend/vercel.json)。
+不需要 AWS 或自管理虚拟机。Railway 使用 [backend/Dockerfile](backend/Dockerfile) 和 [backend/railway.toml](backend/railway.toml)，Vercel 使用 [frontend/vercel.json](frontend/vercel.json)。
 
 ## 项目结构
 
 ```text
 .
-├── backend
-│   ├── src/main/java/dev/buildtrace
-│   │   ├── generation   # Prompt、模型流、HTML 校验、fallback
-│   │   └── project      # 项目、消息、版本 API 与事务
-│   ├── src/test         # 持久化、隔离、提取与 CLI 测试
-│   ├── Dockerfile
-│   └── railway.toml
-├── frontend
-│   ├── src
-│   │   ├── api.ts       # JSON API、SSE 解析、完成语义
-│   │   ├── App.tsx      # 项目和生成状态编排
-│   │   └── components   # 对话、预览、版本和项目列表
-│   └── vercel.json
-├── docs
-│   └── ai-development-report.md
-└── .env.example
+├── backend/src/main/java/dev/buildtrace
+│   ├── auth          # 注册登录、JWT、Spring Security
+│   ├── generation    # Prompt、流式模型、操作解析、候选校验/修复
+│   └── project       # 项目、run、消息、版本和恢复事务
+├── frontend/src
+│   ├── api.ts        # Bearer JSON API 和 SSE 完成语义
+│   ├── App.tsx       # 账号、项目和 durable run 恢复
+│   └── components    # Auth、对话、Sandpack、文件树、版本
+├── specs/changes/atoms-demo-v2
+│   └── ...           # 决策、前端契约和验证矩阵
+└── docs/ai-development-report.md
 ```
 
-需求取舍、AI 协作方式、真实纠偏和验证记录见 [`docs/ai-development-report.md`](docs/ai-development-report.md)。
+实现取舍、首次反馈回流、AI 协作边界和实际验收记录见 [docs/ai-development-report.md](docs/ai-development-report.md)。

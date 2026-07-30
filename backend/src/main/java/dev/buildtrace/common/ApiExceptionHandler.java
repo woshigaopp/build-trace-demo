@@ -23,6 +23,11 @@ public class ApiExceptionHandler {
         return response(HttpStatus.BAD_REQUEST, exception.getMessage());
     }
 
+    @ExceptionHandler(IllegalStateException.class)
+    ResponseEntity<Map<String, Object>> handleConflict(IllegalStateException exception) {
+        return response(HttpStatus.CONFLICT, exception.getMessage());
+    }
+
     private ResponseEntity<Map<String, Object>> response(HttpStatus status, String message) {
         return ResponseEntity.status(status).body(Map.of(
             "status", status.value(),

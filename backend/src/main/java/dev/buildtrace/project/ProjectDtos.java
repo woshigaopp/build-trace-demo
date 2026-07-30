@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Size;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 public final class ProjectDtos {
 
@@ -34,6 +35,8 @@ public final class ProjectDtos {
         String id,
         String role,
         String content,
+        String runId,
+        String status,
         Instant createdAt
     ) {
     }
@@ -42,6 +45,39 @@ public final class ProjectDtos {
         String id,
         int versionNumber,
         String prompt,
+        String source,
+        String summary,
+        int fileCount,
+        Instant createdAt
+    ) {
+    }
+
+    public record GenerationRunResponse(
+        String id,
+        String prompt,
+        String status,
+        String model,
+        int attemptCount,
+        String errorMessage,
+        Long durationMs,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+    }
+
+    public record SaveVersionRequest(
+        Map<String, String> files,
+        @Size(max = 500) String summary
+    ) {
+    }
+
+    public record VersionDetail(
+        String id,
+        int versionNumber,
+        String prompt,
+        String source,
+        String summary,
+        Map<String, String> files,
         Instant createdAt
     ) {
     }
@@ -49,11 +85,21 @@ public final class ProjectDtos {
     public record ProjectDetail(
         String id,
         String name,
-        String currentHtml,
+        String currentVersionId,
+        Map<String, String> currentFiles,
         Instant createdAt,
         Instant updatedAt,
         List<MessageResponse> messages,
-        List<VersionResponse> versions
+        List<VersionResponse> versions,
+        List<GenerationRunResponse> runs
+    ) {
+    }
+
+    public record GenerationContext(
+        String runId,
+        String projectId,
+        String prompt,
+        Map<String, String> currentFiles
     ) {
     }
 }

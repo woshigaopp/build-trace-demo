@@ -25,6 +25,9 @@ public class ProjectEntity {
     @Column(columnDefinition = "TEXT")
     private String currentHtml;
 
+    @Column(length = 36)
+    private String currentVersionId;
+
     @Column(nullable = false)
     private Instant createdAt;
 
@@ -34,9 +37,9 @@ public class ProjectEntity {
     protected ProjectEntity() {
     }
 
-    public ProjectEntity(String id, String guestId, String name, Instant createdAt) {
+    public ProjectEntity(String id, String ownerId, String name, Instant createdAt) {
         this.id = id;
-        this.guestId = guestId;
+        this.guestId = ownerId;
         this.name = name;
         this.createdAt = createdAt;
         this.updatedAt = createdAt;
@@ -46,7 +49,7 @@ public class ProjectEntity {
         return id;
     }
 
-    public String getGuestId() {
+    public String getOwnerId() {
         return guestId;
     }
 
@@ -56,6 +59,10 @@ public class ProjectEntity {
 
     public String getCurrentHtml() {
         return currentHtml;
+    }
+
+    public String getCurrentVersionId() {
+        return currentVersionId;
     }
 
     public Instant getCreatedAt() {
@@ -71,8 +78,9 @@ public class ProjectEntity {
         this.updatedAt = Instant.now();
     }
 
-    public void applyHtml(String html) {
-        this.currentHtml = html;
+    public void applyVersion(String versionId) {
+        this.currentVersionId = versionId;
+        this.currentHtml = "";
         this.updatedAt = Instant.now();
     }
 }
